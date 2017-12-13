@@ -232,8 +232,7 @@ static void init_pmd(pud_t *pud, unsigned long addr, unsigned long end,
 
 		/* try section mapping first */
 		if (((addr | next | phys) & ~SECTION_MASK) == 0 &&
-		    (flags & NO_BLOCK_MAPPINGS) == 0 &&
-		    !dma_overlap(phys, phys + next - addr)) {
+		    (flags & NO_BLOCK_MAPPINGS) == 0) {
 			pmd_set_huge(pmd, phys, prot);
 
 			/*
@@ -328,8 +327,7 @@ static void alloc_init_pud(pgd_t *pgd, unsigned long addr, unsigned long end,
 		 * For 4K granule only, attempt to put down a 1GB block
 		 */
 		if (use_1G_block(addr, next, phys) &&
-		    (flags & NO_BLOCK_MAPPINGS) == 0 &&
-		    !dma_overlap(phys, phys + next - addr)) {
+		    (flags & NO_BLOCK_MAPPINGS) == 0) {
 			pud_set_huge(pud, phys, prot);
 
 			/*
@@ -652,8 +650,8 @@ static void __init map_kernel(pgd_t *pgd)
 		 * entry instead.
 		 */
 		BUG_ON(!IS_ENABLED(CONFIG_ARM64_16K_PAGES));
-		set_pud(pud_set_fixmap_offset(pgd, FIXADDR_START),
-			__pud(__pa_symbol(bm_pmd) | PUD_TYPE_TABLE));
+		pud_populate(&init_mm, pud_set_fixmap_offset(pgd, FIXADDR_START),
+			     lm_alias(bm_pmd));
 		pud_clear_fixmap();
 	} else {
 		BUG();
@@ -1158,23 +1156,15 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node)
 			void *p = NULL;
 
 			p = vmemmap_alloc_block_buf(PMD_SIZE, node);
-			if (!p) {
-#ifdef CONFIG_MEMORY_HOTPLUG
-				vmemmap_free(start, end);
-#endif
-				ret = -ENOMEM;
-				break;
-			}
+			if (!p)
+				return -ENOMEM;
 
-			set_pmd(pmd, __pmd(__pa(p) | PROT_SECT_NORMAL));
+			pmd_set_huge(pmd, __pa(p), __pgprot(PROT_SECT_NORMAL));
 		} else
 			vmemmap_verify((pte_t *)pmd, node, addr, next);
 	} while (addr = next, addr != end);
 
-	if (ret)
-		return vmemmap_populate_basepages(start, end, node);
-	else
-		return ret;
+	return 0;
 }
 #endif	/* CONFIG_ARM64_64K_PAGES */
 void vmemmap_free(unsigned long start, unsigned long end)
@@ -1368,15 +1358,8 @@ int pud_set_huge(pud_t *pud, phys_addr_t phys, pgprot_t prot)
 {
 	pgprot_t sect_prot = __pgprot(PUD_TYPE_SECT |
 					pgprot_val(mk_sect_prot(prot)));
-	pud_t new_pud = pfn_pud(__phys_to_pfn(phys), sect_prot);
-
-	/* Only allow permission changes for now */
-	if (!pgattr_change_is_safe(READ_ONCE(pud_val(*pud)),
-				   pud_val(new_pud)))
-		return 0;
-
 	BUG_ON(phys & ~PUD_MASK);
-	set_pud(pud, new_pud);
+	set_pud(pud, pfn_pud(__phys_to_pfn(phys), sect_prot));
 	return 1;
 }
 
@@ -1384,15 +1367,8 @@ int pmd_set_huge(pmd_t *pmd, phys_addr_t phys, pgprot_t prot)
 {
 	pgprot_t sect_prot = __pgprot(PMD_TYPE_SECT |
 					pgprot_val(mk_sect_prot(prot)));
-	pmd_t new_pmd = pfn_pmd(__phys_to_pfn(phys), sect_prot);
-
-	/* Only allow permission changes for now */
-	if (!pgattr_change_is_safe(READ_ONCE(pmd_val(*pmd)),
-				   pmd_val(new_pmd)))
-		return 0;
-
 	BUG_ON(phys & ~PMD_MASK);
-	set_pmd(pmd, new_pmd);
+	set_pmd(pmd, pfn_pmd(__phys_to_pfn(phys), sect_prot));
 	return 1;
 }
 
@@ -1412,53 +1388,12 @@ int pmd_clear_huge(pmd_t *pmd)
 	return 1;
 }
 
-int pmd_free_pte_page(pmd_t *pmdp, unsigned long addr)
+int pud_free_pmd_page(pud_t *pud, unsigned long addr)
 {
-	pte_t *table;
-	pmd_t pmd;
-
-	pmd = READ_ONCE(*pmdp);
-
-	if (!pmd_present(pmd))
-		return 1;
-	if (!pmd_table(pmd)) {
-		VM_WARN_ON(!pmd_table(pmd));
-		return 1;
-	}
-
-	table = pte_offset_kernel(pmdp, addr);
-	pmd_clear(pmdp);
-	__flush_tlb_kernel_pgtable(addr);
-	pte_free_kernel(NULL, table);
-	return 1;
+	return pud_none(*pud);
 }
 
-int pud_free_pmd_page(pud_t *pudp, unsigned long addr)
+int pmd_free_pte_page(pmd_t *pmd, unsigned long addr)
 {
-	pmd_t *table;
-	pmd_t *pmdp;
-	pud_t pud;
-	unsigned long next, end;
-
-	pud = READ_ONCE(*pudp);
-
-	if (!pud_present(pud))
-		return 1;
-	if (!pud_table(pud)) {
-		VM_WARN_ON(!pud_table(pud));
-		return 1;
-	}
-
-	table = pmd_offset(pudp, addr);
-	pmdp = table;
-	next = addr;
-	end = addr + PUD_SIZE;
-	do {
-		pmd_free_pte_page(pmdp, next);
-	} while (pmdp++, next += PMD_SIZE, next != end);
-
-	pud_clear(pudp);
-	__flush_tlb_kernel_pgtable(addr);
-	pmd_free(NULL, table);
-	return 1;
+	return pmd_none(*pmd);
 }
