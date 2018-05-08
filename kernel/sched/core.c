@@ -2218,7 +2218,9 @@ out:
 	if (success && sched_predl) {
 		raw_spin_lock_irqsave(&cpu_rq(cpu)->lock, flags);
 		if (do_pl_notif(cpu_rq(cpu)))
-			cpufreq_update_util(cpu_rq(cpu), SCHED_CPUFREQ_PL);
+			cpufreq_update_util(cpu_rq(cpu),
+					    SCHED_CPUFREQ_WALT |
+					    SCHED_CPUFREQ_PL);
 		raw_spin_unlock_irqrestore(&cpu_rq(cpu)->lock, flags);
 	}
 	return success;
