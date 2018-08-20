@@ -2149,6 +2149,7 @@ cpu_util_freq_walt(int cpu, struct sched_walt_cpu_load *walt_load)
 
 		nl = div64_u64(nl * (100 + boost),
 		walt_cpu_util_freq_divisor);
+		pl = div64_u64(pl * (100 + boost), 100);
 
 		walt_load->prev_window_util = util;
 		walt_load->nl = nl;
@@ -3213,4 +3214,4 @@ static inline void sched_irq_work_queue(struct irq_work *work)
 	else
 		irq_work_queue_on(work, cpumask_any(cpu_online_mask));
 }
-#endif
+#endif	
