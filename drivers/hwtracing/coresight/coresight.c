@@ -215,15 +215,14 @@ static int coresight_enable_sink(struct coresight_device *csdev, u32 mode)
 {
 	int ret;
 
-	if (!csdev->enable) {
-		if (sink_ops(csdev)->enable) {
-			coresight_enable_reg_clk(csdev);
-			ret = sink_ops(csdev)->enable(csdev, mode);
-			if (ret) {
-				coresight_disable_reg_clk(csdev);
-				return ret;
-			}
-		}
+	/*
+	 * We need to make sure the "new" session is compatible with the
+	 * existing "mode" of operation.
+	 */
+	if (sink_ops(csdev)->enable) {
+		ret = sink_ops(csdev)->enable(csdev, mode);
+		if (ret)
+			return ret;
 		csdev->enable = true;
 	}
 
@@ -464,8 +463,14 @@ int coresight_enable_path(struct list_head *path, u32 mode)
 		switch (type) {
 		case CORESIGHT_DEV_TYPE_SINK:
 			ret = coresight_enable_sink(csdev, mode);
+			/*
+			 * Sink is the first component turned on. If we
+			 * failed to enable the sink, there are no components
+			 * that need disabling. Disabling the path here
+			 * would mean we could disrupt an existing session.
+			 */
 			if (ret)
-				goto err;
+				goto out;
 			break;
 		case CORESIGHT_DEV_TYPE_SOURCE:
 			/* sources are enabled from either sysFS or Perf */
@@ -473,7 +478,7 @@ int coresight_enable_path(struct list_head *path, u32 mode)
 		case CORESIGHT_DEV_TYPE_LINK:
 			parent = list_prev_entry(nd, link)->csdev;
 			child = list_next_entry(nd, link)->csdev;
-			ret = coresight_enable_link(csdev, parent, child, path);
+			ret = coresight_enable_link(csdev, parent, child);
 			if (ret)
 				goto err;
 			break;
@@ -485,7 +490,7 @@ int coresight_enable_path(struct list_head *path, u32 mode)
 out:
 	return ret;
 err:
-	coresight_disable_previous_devs(path, nd);
+	coresight_disable_path(path);
 	goto out;
 }
 
