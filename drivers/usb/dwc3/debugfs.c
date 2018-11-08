@@ -285,32 +285,6 @@ static const struct debugfs_reg32 dwc3_regs[] = {
 	dump_register(OSTS),
 };
 
-static int dwc3_regdump_show(struct seq_file *s, void *unused)
-{
-	struct dwc3		*dwc = s->private;
-
-	if (atomic_read(&dwc->in_lpm)) {
-		seq_puts(s, "USB device is powered off\n");
-		return 0;
-	}
-
-	debugfs_print_regs32(s, dwc->regset->regs, dwc->regset->nregs,
-				dwc->regset->base, "");
-	return 0;
-}
-
-static int dwc3_regdump_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, dwc3_regdump_show, inode->i_private);
-}
-
-static const struct file_operations dwc3_regdump_fops = {
-	.open			= dwc3_regdump_open,
-	.read			= seq_read,
-	.llseek			= seq_lseek,
-	.release		= single_release,
-};
-
 static int dwc3_mode_show(struct seq_file *s, void *unused)
 {
 	struct dwc3		*dwc = s->private;
@@ -485,6 +459,7 @@ static int dwc3_link_state_show(struct seq_file *s, void *unused)
 	unsigned long		flags;
 	enum dwc3_link_state	state;
 	u32			reg;
+	u8			speed;
 
 	if (atomic_read(&dwc->in_lpm)) {
 		seq_puts(s, "USB device is powered off\n");
@@ -494,9 +469,12 @@ static int dwc3_link_state_show(struct seq_file *s, void *unused)
 	spin_lock_irqsave(&dwc->lock, flags);
 	reg = dwc3_readl(dwc->regs, DWC3_DSTS);
 	state = DWC3_DSTS_USBLNKST(reg);
-	spin_unlock_irqrestore(&dwc->lock, flags);
+	speed = reg & DWC3_DSTS_CONNECTSPD;
 
-	seq_printf(s, "%s\n", dwc3_gadget_link_string(state));
+	seq_printf(s, "%s\n", (speed >= DWC3_DSTS_SUPERSPEED) ?
+		   dwc3_gadget_link_string(state) :
+		   dwc3_gadget_hs_link_string(state));
+	spin_unlock_irqrestore(&dwc->lock, flags);
 
 	return 0;
 }
@@ -514,6 +492,8 @@ static ssize_t dwc3_link_state_write(struct file *file,
 	unsigned long		flags;
 	enum dwc3_link_state	state = 0;
 	char			buf[32] = {};
+	u32			reg;
+	u8			speed;
 
 	if (atomic_read(&dwc->in_lpm)) {
 		seq_puts(s, "USB device is powered off\n");
@@ -539,6 +519,15 @@ static ssize_t dwc3_link_state_write(struct file *file,
 		return -EINVAL;
 
 	spin_lock_irqsave(&dwc->lock, flags);
+		reg = dwc3_readl(dwc->regs, DWC3_DSTS);
+	speed = reg & DWC3_DSTS_CONNECTSPD;
+
+	if (speed < DWC3_DSTS_SUPERSPEED &&
+	    state != DWC3_LINK_STATE_RECOV) {
+		spin_unlock_irqrestore(&dwc->lock, flags);
+		return -EINVAL;
+	}
+
 	dwc3_gadget_set_link_state(dwc, state);
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
@@ -1044,8 +1033,7 @@ void dwc3_debugfs_init(struct dwc3 *dwc)
 	dwc->regset->nregs = ARRAY_SIZE(dwc3_regs);
 	dwc->regset->base = dwc->regs - DWC3_GLOBALS_REGS_START;
 
-	file = debugfs_create_file("regdump", 0444, root, dwc,
-			&dwc3_regdump_fops);
+	file = debugfs_create_regset32("regdump", S_IRUGO, root, dwc->regset);
 	if (!file)
 		dev_dbg(dwc->dev, "Can't create debugfs regdump\n");
 
@@ -1082,3 +1070,4 @@ void dwc3_debugfs_exit(struct dwc3 *dwc)
 	debugfs_remove_recursive(dwc->root);
 	kfree(dwc->regset);
 }
+
