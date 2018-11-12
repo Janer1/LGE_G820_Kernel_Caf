@@ -12,6 +12,8 @@
  *	(at your option) any later version.
  */
 
+#define pr_fmt(fmt) "LSM: " fmt
+
 #include <linux/bpf.h>
 #include <linux/capability.h>
 #include <linux/dcache.h>
@@ -39,17 +41,48 @@ struct security_hook_heads security_hook_heads __lsm_ro_after_init;
 static ATOMIC_NOTIFIER_HEAD(lsm_notifier_chain);
 
 char *lsm_names;
+static struct lsm_blob_sizes blob_sizes __lsm_ro_after_init;
+
 /* Boot-time LSM user choice */
 static __initdata char chosen_lsm[SECURITY_NAME_MAX + 1] =
 	CONFIG_DEFAULT_SECURITY;
 
-static void __init do_security_initcalls(void)
+static __initdata bool debug;
+#define init_debug(...)						\
+	do {							\
+		if (debug)					\
+			pr_info(__VA_ARGS__);			\
+	} while (0)
+
+static void __init lsm_set_blob_size(int *need, int *lbs)
 {
-	initcall_t *call;
-	call = __security_initcall_start;
-	while (call < __security_initcall_end) {
-		(*call) ();
-		call++;
+	int offset;
+
+	if (*need > 0) {
+		offset = *lbs;
+		*lbs += *need;
+		*need = offset;
+	}
+}
+
+static void __init lsm_set_blob_sizes(struct lsm_blob_sizes *needed)
+{
+	if (!needed)
+		return;
+
+	lsm_set_blob_size(&needed->lbs_cred, &blob_sizes.lbs_cred);
+}
+
+static void __init major_lsm_init(void)
+{
+	struct lsm_info *lsm;
+	int ret;
+
+	for (lsm = __start_lsm_info; lsm < __end_lsm_info; lsm++) {
+		init_debug("initializing %s\n", lsm->name);
+		lsm_set_blob_sizes(lsm->blobs);
+		ret = lsm->init();
+		WARN(ret, "%s failed to initialize: %d\n", lsm->name, ret);
 	}
 }
 
@@ -63,10 +96,11 @@ int __init security_init(void)
 	int i;
 	struct list_head *list = (struct list_head *) &security_hook_heads;
 
+	pr_info("Security Framework initializing\n");
+
 	for (i = 0; i < sizeof(security_hook_heads) / sizeof(struct list_head);
 	     i++)
 		INIT_LIST_HEAD(&list[i]);
-	pr_info("Security Framework initialized\n");
 
 	/*
 	 * Load minor LSMs, with the capability module always first.
@@ -78,7 +112,7 @@ int __init security_init(void)
 	/*
 	 * Load all the remaining security modules.
 	 */
-	do_security_initcalls();
+	major_lsm_init();
 
 	return 0;
 }
@@ -90,6 +124,14 @@ static int __init choose_lsm(char *str)
 	return 1;
 }
 __setup("security=", choose_lsm);
+
+/* Enable LSM order debugging. */
+static int __init enable_debug(char *str)
+{
+	debug = true;
+	return 1;
+}
+__setup("lsm.debug", enable_debug);
 
 static bool match_last_lsm(const char *list, const char *lsm)
 {
@@ -188,6 +230,47 @@ int unregister_lsm_notifier(struct notifier_block *nb)
 	return atomic_notifier_chain_unregister(&lsm_notifier_chain, nb);
 }
 EXPORT_SYMBOL(unregister_lsm_notifier);
+
+/**
+ * lsm_cred_alloc - allocate a composite cred blob
+ * @cred: the cred that needs a blob
+ * @gfp: allocation type
+ *
+ * Allocate the cred blob for all the modules
+ *
+ * Returns 0, or -ENOMEM if memory can't be allocated.
+ */
+static int lsm_cred_alloc(struct cred *cred, gfp_t gfp)
+{
+	if (blob_sizes.lbs_cred == 0) {
+		cred->security = NULL;
+		return 0;
+	}
+
+	cred->security = kzalloc(blob_sizes.lbs_cred, gfp);
+	if (cred->security == NULL)
+		return -ENOMEM;
+	return 0;
+}
+
+/**
+ * lsm_early_cred - during initialization allocate a composite cred blob
+ * @cred: the cred that needs a blob
+ *
+ * Allocate the cred blob for all the modules if it's not already there
+ */
+void __init lsm_early_cred(struct cred *cred)
+{
+	int rc;
+
+	if (cred == NULL)
+		panic("%s: NULL cred.\n", __func__);
+	if (cred->security != NULL)
+		return;
+	rc = lsm_cred_alloc(cred, GFP_KERNEL);
+	if (rc)
+		panic("%s: Early cred alloc failed.\n", __func__);
+}
 
 /*
  * Hook list operation macros.
@@ -998,7 +1081,15 @@ void security_task_free(struct task_struct *task)
 
 int security_cred_alloc_blank(struct cred *cred, gfp_t gfp)
 {
-	return call_int_hook(cred_alloc_blank, 0, cred, gfp);
+	int rc = lsm_cred_alloc(cred, gfp);
+
+	if (rc)
+		return rc;
+
+	rc = call_int_hook(cred_alloc_blank, 0, cred, gfp);
+	if (rc)
+		security_cred_free(cred);
+	return rc;
 }
 
 void security_cred_free(struct cred *cred)
@@ -1011,11 +1102,22 @@ void security_cred_free(struct cred *cred)
 		return;
 
 	call_void_hook(cred_free, cred);
+
+	kfree(cred->security);
+	cred->security = NULL;
 }
 
 int security_prepare_creds(struct cred *new, const struct cred *old, gfp_t gfp)
 {
-	return call_int_hook(cred_prepare, 0, new, old, gfp);
+	int rc = lsm_cred_alloc(new, gfp);
+
+	if (rc)
+		return rc;
+
+	rc = call_int_hook(cred_prepare, 0, new, old, gfp);
+	if (rc)
+		security_cred_free(new);
+	return rc;
 }
 
 void security_transfer_creds(struct cred *new, const struct cred *old)
