@@ -325,6 +325,9 @@ Files in /sys/fs/f2fs/<devname>
 			      by free nids and cached nat entries. By default,
 			      10 is set, which indicates 10 MB / 1 GB RAM.
 
+encoding 	              This shows the encoding used for casefolding.
+                              If casefolding is not enabled, returns (none)
+
 ================================================================================
 USAGE
 ================================================================================
