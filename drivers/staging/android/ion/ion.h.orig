@@ -218,11 +218,18 @@ struct ion_heap {
 	/* Protect the free list */
 	spinlock_t free_lock;
 	wait_queue_head_t waitqueue;
+<<<<<<< HEAD
+	struct task_struct *task;
+	atomic_long_t total_allocated;
+
+	int (*debug_show)(struct ion_heap *heap, struct seq_file *, void *);
 
 #ifdef CONFIG_MIGRATE_HIGHORDER
 	size_t free_highorder_size;
 #endif
 
+=======
+>>>>>>> d3712a4b0e7a... ion: Rewrite for improved clarity and performance
 };
 
 static inline bool ion_buffer_cached(struct ion_buffer *buffer)
