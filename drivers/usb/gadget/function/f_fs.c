@@ -1157,6 +1157,7 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 
 		ret = usb_ep_queue(ep->ep, req, GFP_ATOMIC);
 		if (unlikely(ret)) {
+			io_data->req = NULL;
 			usb_ep_free_request(ep->ep, req);
 			goto error_lock;
 		}
@@ -1214,24 +1215,19 @@ static int ffs_aio_cancel(struct kiocb *kiocb)
 {
 	struct ffs_io_data *io_data = kiocb->private;
 	struct ffs_epfile *epfile = kiocb->ki_filp->private_data;
-	struct ffs_data *ffs = epfile->ffs;
+	unsigned long flags;
 	int value;
 
 	ENTER();
 
-	ffs_log("enter:state %d setup_state %d flag %lu", ffs->state,
-		ffs->setup_state, ffs->flags);
-
-	spin_lock_irq(&epfile->ffs->eps_lock);
+	spin_lock_irqsave(&epfile->ffs->eps_lock, flags);
 
 	if (likely(io_data && io_data->ep && io_data->req))
 		value = usb_ep_dequeue(io_data->ep, io_data->req);
 	else
 		value = -EINVAL;
 
-	spin_unlock_irq(&epfile->ffs->eps_lock);
-
-	ffs_log("exit: value %d", value);
+	spin_unlock_irqrestore(&epfile->ffs->eps_lock, flags);
 
 	return value;
 }
@@ -1951,6 +1947,10 @@ static void ffs_data_reset(struct ffs_data *ffs)
 	ffs->state = FFS_READ_DESCRIPTORS;
 	ffs->setup_state = FFS_NO_SETUP;
 	ffs->flags = 0;
+
+	ffs->ms_os_descs_ext_prop_count = 0;
+	ffs->ms_os_descs_ext_prop_name_len = 0;
+	ffs->ms_os_descs_ext_prop_data_len = 0;
 }
 
 
@@ -4119,3 +4119,4 @@ static char *ffs_prepare_buffer(const char __user *buf, size_t len)
 DECLARE_USB_FUNCTION_INIT(ffs, ffs_alloc_inst, ffs_alloc);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Michal Nazarewicz");
+
