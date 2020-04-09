@@ -151,7 +151,6 @@ static DEFINE_MUTEX(qrtr_port_lock);
  * @kworker: worker thread for recv work
  * @task: task to run the worker thread
  * @read_data: scheduled work for recv work
- * @say_hello: scheduled work for initiating hello
  * @ws: wakeupsource avoid system suspend
  * @ilc: ipc logging context reference
  */
@@ -162,19 +161,18 @@ struct qrtr_node {
 	unsigned int nid;
 	unsigned int net_id;
 	atomic_t hello_sent;
-	atomic_t hello_rcvd;
 
 	struct radix_tree_root qrtr_tx_flow;
 	struct wait_queue_head resume_tx;
 	struct mutex qrtr_tx_lock;	/* for qrtr_tx_flow */
 
 	struct sk_buff_head rx_queue;
+	struct work_struct work;
 	struct list_head item;
 
 	struct kthread_worker kworker;
 	struct task_struct *task;
 	struct kthread_work read_data;
-	struct kthread_work say_hello;
 
 	struct wakeup_source *ws;
 
@@ -207,14 +205,11 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 {
 	const struct qrtr_ctrl_pkt *pkt;
 	u64 pl_buf = 0;
-	u32 type;
 
 	if (!hdr || !skb || !skb->data)
 		return;
 
-	type = le32_to_cpu(hdr->type);
-
-	if (type == QRTR_TYPE_DATA) {
+	if (hdr->type == QRTR_TYPE_DATA) {
 		pl_buf = *(u64 *)(skb->data + QRTR_HDR_MAX_SIZE);
 		QRTR_INFO(node->ilc,
 			  "TX DATA: Len:0x%x CF:0x%x src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x] [%s]\n",
@@ -225,34 +220,29 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 			  current->comm);
 	} else {
 		pkt = (struct qrtr_ctrl_pkt *)(skb->data + QRTR_HDR_MAX_SIZE);
-		if (type == QRTR_TYPE_NEW_SERVER ||
-		    type == QRTR_TYPE_DEL_SERVER)
+		if (hdr->type == QRTR_TYPE_NEW_SERVER ||
+		    hdr->type == QRTR_TYPE_DEL_SERVER)
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x SVC[0x%x:0x%x] addr[0x%x:0x%x]\n",
-				  type, le32_to_cpu(pkt->server.service),
+				  hdr->type, le32_to_cpu(pkt->server.service),
 				  le32_to_cpu(pkt->server.instance),
 				  le32_to_cpu(pkt->server.node),
 				  le32_to_cpu(pkt->server.port));
-		else if (type == QRTR_TYPE_DEL_CLIENT ||
-			 type == QRTR_TYPE_RESUME_TX)
+		else if (hdr->type == QRTR_TYPE_DEL_CLIENT ||
+			 hdr->type == QRTR_TYPE_RESUME_TX)
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x addr[0x%x:0x%x]\n",
-				  type, le32_to_cpu(pkt->client.node),
+				  hdr->type, le32_to_cpu(pkt->client.node),
 				  le32_to_cpu(pkt->client.port));
-		else if (type == QRTR_TYPE_HELLO ||
-			 type == QRTR_TYPE_BYE) {
+		else if (hdr->type == QRTR_TYPE_HELLO ||
+			 hdr->type == QRTR_TYPE_BYE)
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x node[0x%x]\n",
-				  type, hdr->src_node_id);
-			if (le32_to_cpu(hdr->dst_node_id) == 0 ||
-			    le32_to_cpu(hdr->dst_node_id) == 3)
-				pr_err("qrtr: Modem QMI Readiness TX cmd:0x%x node[0x%x]\n",
-				       type, hdr->src_node_id);
-			}
-		else if (type == QRTR_TYPE_DEL_PROC)
+				  hdr->type, hdr->src_node_id);
+		else if (hdr->type == QRTR_TYPE_DEL_PROC)
 			QRTR_INFO(node->ilc,
 				  "TX CTRL: cmd:0x%x node[0x%x]\n",
-				  type, pkt->proc.node);
+				  hdr->type, pkt->proc.node);
 	}
 }
 
@@ -291,14 +281,10 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 				  cb->type, le32_to_cpu(pkt->client.node),
 				  le32_to_cpu(pkt->client.port));
 		else if (cb->type == QRTR_TYPE_HELLO ||
-			 cb->type == QRTR_TYPE_BYE) {
+			 cb->type == QRTR_TYPE_BYE)
 			QRTR_INFO(node->ilc,
 				  "RX CTRL: cmd:0x%x node[0x%x]\n",
 				  cb->type, cb->src_node);
-			if (cb->src_node == 0 || cb->src_node == 3)
-				pr_err("qrtr: Modem QMI Readiness RX cmd:0x%x node[0x%x]\n",
-				       cb->type, cb->src_node);
-			}
 	}
 }
 
@@ -370,6 +356,7 @@ static void __qrtr_node_release(struct kref *kref)
 	kthread_flush_worker(&node->kworker);
 	kthread_stop(node->task);
 
+	cancel_work_sync(&node->work);
 	skb_queue_purge(&node->rx_queue);
 	kfree(node);
 }
@@ -531,10 +518,6 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 		kfree_skb(skb);
 		return rc;
 	}
-	if (atomic_read(&node->hello_sent) && type == QRTR_TYPE_HELLO) {
-		kfree_skb(skb);
-		return 0;
-	}
 
 	/* If sk is null, this is a forwarded packet and should not wait */
 	if (!skb->sk) {
@@ -563,13 +546,8 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	hdr->size = cpu_to_le32(len);
 	hdr->confirm_rx = !!confirm_rx;
 
+	skb_put_padto(skb, ALIGN(len, 4) + sizeof(*hdr));
 	qrtr_log_tx_msg(node, hdr, skb);
-	rc = skb_put_padto(skb, ALIGN(len, 4) + sizeof(*hdr));
-	if (rc) {
-		pr_err("%s: failed to pad size %lu to %lu rc:%d\n", __func__,
-		       len, ALIGN(len, 4) + sizeof(*hdr), rc);
-		return rc;
-	}
 
 	mutex_lock(&node->ep_lock);
 	if (node->ep)
@@ -829,24 +807,6 @@ static struct sk_buff *qrtr_alloc_ctrl_packet(struct qrtr_ctrl_pkt **pkt)
 static struct qrtr_sock *qrtr_port_lookup(int port);
 static void qrtr_port_put(struct qrtr_sock *ipc);
 
-/* Prepare skb for forwarding by allocating enough linear memory to align and
- * add the header since qrtr transports do not support fragmented skbs
- */
-static void qrtr_skb_align_linearize(struct sk_buff *skb)
-{
-	int nhead = ALIGN(skb->len, 4) + sizeof(struct qrtr_hdr_v1);
-	int rc;
-
-	if (!skb_is_nonlinear(skb))
-		return;
-
-	rc = pskb_expand_head(skb, nhead, 0, GFP_KERNEL);
-	skb_condense(skb);
-	if (rc)
-		pr_err("%s: failed:%d to allocate linear skb size:%d\n",
-		       __func__, rc, nhead);
-}
-
 static bool qrtr_must_forward(struct qrtr_node *src,
 			      struct qrtr_node *dst, u32 type)
 {
@@ -877,7 +837,6 @@ static void qrtr_fwd_ctrl_pkt(struct sk_buff *skb)
 	struct qrtr_node *src;
 	struct qrtr_cb *cb = (struct qrtr_cb *)skb->cb;
 
-	qrtr_skb_align_linearize(skb);
 	src = qrtr_node_lookup(cb->src_node);
 	down_read(&qrtr_node_lock);
 	list_for_each_entry(node, &qrtr_all_epts, item) {
@@ -912,7 +871,6 @@ static void qrtr_fwd_pkt(struct sk_buff *skb, struct qrtr_cb *cb)
 	struct sockaddr_qrtr to = {AF_QIPCRTR, cb->dst_node, cb->dst_port};
 	struct qrtr_node *node;
 
-	qrtr_skb_align_linearize(skb);
 	node = qrtr_node_lookup(cb->dst_node);
 	if (!node) {
 		kfree_skb(skb);
@@ -922,30 +880,6 @@ static void qrtr_fwd_pkt(struct sk_buff *skb, struct qrtr_cb *cb)
 	qrtr_node_enqueue(node, skb, cb->type, &from, &to, 0);
 	qrtr_node_release(node);
 }
-
-static void qrtr_sock_queue_skb(struct qrtr_node *node, struct sk_buff *skb,
-				struct qrtr_sock *ipc)
-{
-	struct qrtr_cb *cb = (struct qrtr_cb *)skb->cb;
-	int rc;
-
-	/* Don't queue HELLO if control port already received */
-	if (cb->type == QRTR_TYPE_HELLO) {
-		if (atomic_read(&node->hello_rcvd)) {
-			kfree_skb(skb);
-			return;
-		}
-		atomic_inc(&node->hello_rcvd);
-	}
-
-	rc = sock_queue_rcv_skb(&ipc->sk, skb);
-	if (rc) {
-		pr_err("%s: qrtr pkt dropped flow[%d] rc[%d]\n",
-		       __func__, cb->confirm_rx, rc);
-		kfree_skb(skb);
-	}
-}
-
 /* Handle and route a received packet.
  *
  * This will auto-reply with resume-tx packet as necessary.
@@ -988,38 +922,16 @@ static void qrtr_node_rx_work(struct kthread_work *work)
 			if (!ipc) {
 				kfree_skb(skb);
 			} else {
-				qrtr_sock_queue_skb(node, skb, ipc);
+				if (sock_queue_rcv_skb(&ipc->sk, skb)) {
+					pr_err("%s qrtr pkt dropped flow[%d]\n",
+					       __func__, cb->confirm_rx);
+					kfree_skb(skb);
+				}
+
 				qrtr_port_put(ipc);
 			}
 		}
 	}
-}
-
-static void qrtr_hello_work(struct kthread_work *work)
-{
-	struct sockaddr_qrtr from = {AF_QIPCRTR, 0, QRTR_PORT_CTRL};
-	struct sockaddr_qrtr to = {AF_QIPCRTR, 0, QRTR_PORT_CTRL};
-	struct qrtr_ctrl_pkt *pkt;
-	struct qrtr_node *node;
-	struct qrtr_sock *ctrl;
-	struct sk_buff *skb;
-
-	ctrl = qrtr_port_lookup(QRTR_PORT_CTRL);
-	if (!ctrl)
-		return;
-
-	skb = qrtr_alloc_ctrl_packet(&pkt);
-	if (!skb) {
-		qrtr_port_put(ctrl);
-		return;
-	}
-
-	node = container_of(work, struct qrtr_node, say_hello);
-	pkt->cmd = cpu_to_le32(QRTR_TYPE_HELLO);
-	from.sq_node = qrtr_local_nid;
-	to.sq_node = node->nid;
-	qrtr_node_enqueue(node, skb, QRTR_TYPE_HELLO, &from, &to, 0);
-	qrtr_port_put(ctrl);
 }
 
 /**
@@ -1050,10 +962,8 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
 	node->nid = QRTR_EP_NID_AUTO;
 	node->ep = ep;
 	atomic_set(&node->hello_sent, 0);
-	atomic_set(&node->hello_rcvd, 0);
 
 	kthread_init_work(&node->read_data, qrtr_node_rx_work);
-	kthread_init_work(&node->say_hello, qrtr_hello_work);
 	kthread_init_worker(&node->kworker);
 	node->task = kthread_run(kthread_worker_fn, &node->kworker, "qrtr_rx");
 	if (IS_ERR(node->task)) {
@@ -1075,7 +985,6 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
 	up_write(&qrtr_node_lock);
 	ep->node = node;
 
-	kthread_queue_work(&node->kworker, &node->say_hello);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qrtr_endpoint_register);
@@ -1357,17 +1266,6 @@ static int __qrtr_bind(struct socket *sock,
 		qrtr_reset_ports();
 	mutex_unlock(&qrtr_port_lock);
 
-	if (port == QRTR_PORT_CTRL) {
-		struct qrtr_node *node;
-
-		down_write(&qrtr_node_lock);
-		list_for_each_entry(node, &qrtr_all_epts, item) {
-			atomic_set(&node->hello_sent, 0);
-			atomic_set(&node->hello_rcvd, 0);
-		}
-		up_write(&qrtr_node_lock);
-	}
-
 	/* unbind previous, if any */
 	if (!zapped)
 		qrtr_port_remove(ipc);
@@ -1467,7 +1365,7 @@ static int qrtr_bcast_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 
 	down_read(&qrtr_node_lock);
 	list_for_each_entry(node, &qrtr_all_epts, item) {
-		if (node->nid == QRTR_EP_NID_AUTO && type != QRTR_TYPE_HELLO)
+		if (node->nid == QRTR_EP_NID_AUTO)
 			continue;
 		skbn = skb_clone(skb, GFP_KERNEL);
 		if (!skbn)
@@ -1541,19 +1439,17 @@ static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	} else if (addr->sq_node == ipc->us.sq_node) {
 		enqueue_fn = qrtr_local_enqueue;
 	} else {
-		enqueue_fn = qrtr_node_enqueue;
 		node = qrtr_node_lookup(addr->sq_node);
 		if (!node) {
 			release_sock(sk);
 			return -ECONNRESET;
 		}
+		enqueue_fn = qrtr_node_enqueue;
 
 		if (ipc->state > QRTR_STATE_INIT && ipc->state != node->nid)
 			ipc->state = QRTR_STATE_MULTI;
 		else if (ipc->state == QRTR_STATE_INIT)
 			ipc->state = node->nid;
-
-		enqueue_fn = qrtr_node_enqueue;
 	}
 
 	plen = (len + 3) & ~3;
@@ -1959,3 +1855,4 @@ module_exit(qrtr_proto_fini);
 
 MODULE_DESCRIPTION("Qualcomm IPC-router driver");
 MODULE_LICENSE("GPL v2");
+
