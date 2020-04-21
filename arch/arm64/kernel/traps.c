@@ -39,7 +39,6 @@
 #include <asm/atomic.h>
 #include <asm/barrier.h>
 #include <asm/bug.h>
-#include <asm/cpufeature.h>
 #include <asm/debug-monitors.h>
 #include <asm/esr.h>
 #include <asm/insn.h>
@@ -892,3 +891,4 @@ void __init trap_init(void)
 {
 	register_break_hook(&bug_break_hook);
 }
+
