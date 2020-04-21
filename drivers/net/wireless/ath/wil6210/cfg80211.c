@@ -3710,3 +3710,4 @@ void wil_nl_60g_receive_wmi_evt(struct wil6210_priv *wil, u8 *cmd, int len)
 out:
 	kfree(evt);
 }
+
