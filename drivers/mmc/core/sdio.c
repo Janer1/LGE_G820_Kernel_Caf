@@ -803,9 +803,8 @@ try_again:
 				/* Retry init sequence, but without R4_18V_PRESENT. */
 				retries = 0;
 				goto try_again;
-			} else {
-				goto remove;
 			}
+			return err;
 		}
 #ifdef CONFIG_MMC_EMBEDDED_SDIO
 	}
@@ -1021,13 +1020,15 @@ static int mmc_sdio_suspend(struct mmc_host *host)
 
 	if (!mmc_card_keep_power(host)) {
 		mmc_power_off(host);
+	} else if (host->ios.clock) {
+		mmc_gate_clock(host);
 	} else if (host->retune_period) {
 		mmc_retune_timer_stop(host);
 		mmc_retune_needed(host);
 	}
 
 	mmc_release_host(host);
-
+	MMC_TRACE(host, "%s: Exit\n", __func__);
 	return 0;
 }
 
@@ -1035,6 +1036,7 @@ static int mmc_sdio_resume(struct mmc_host *host)
 {
 	int err = 0;
 
+	MMC_TRACE(host, "%s: Enter\n", __func__);
 	/* Basic card reinitialization. */
 	mmc_claim_host(host);
 
@@ -1067,6 +1069,13 @@ static int mmc_sdio_resume(struct mmc_host *host)
 	} else if (mmc_card_keep_power(host) && mmc_card_wake_sdio_irq(host)) {
 		/* We may have switched to 1-bit mode during suspend */
 		err = sdio_enable_4bit_bus(host->card);
+		if (err > 0) {
+			if (host->caps & MMC_CAP_8_BIT_DATA)
+				mmc_set_bus_width(host, MMC_BUS_WIDTH_8);
+			else if (host->caps & MMC_CAP_4_BIT_DATA)
+				mmc_set_bus_width(host, MMC_BUS_WIDTH_4);
+			err = 0;
+		}
 	}
 
 	if (err)
@@ -1330,3 +1339,4 @@ int sdio_reset_comm(struct mmc_card *card)
 	return mmc_power_restore_host(card->host);
 }
 EXPORT_SYMBOL(sdio_reset_comm);
+
