@@ -5231,13 +5231,6 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		goto vreg_deinit;
 	}
 
-	/*
-	 * To avoid polling and to avoid this R1b command conversion
-	 * to R1 command if the requested busy timeout > host's max
-	 * busy timeout in case of sanitize, erase or any R1b command
-	 */
-	host->mmc->max_busy_timeout = 0;
-
 	msm_host->pltfm_init_done = true;
 
 	pm_runtime_set_active(&pdev->dev);
@@ -5632,3 +5625,4 @@ module_platform_driver(sdhci_msm_driver);
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Secure Digital Host Controller Interface driver");
 MODULE_LICENSE("GPL v2");
+
