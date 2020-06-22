@@ -1780,8 +1780,12 @@ struct sock *sk_clone_lock(const struct sock *sk, const gfp_t priority)
 		 */
 		sk_refcnt_debug_inc(newsk);
 		sk_set_socket(newsk, NULL);
+<<<<<<< HEAD
 		sk_tx_queue_clear(newsk);
+		newsk->sk_wq = NULL;
+=======
 		RCU_INIT_POINTER(newsk->sk_wq, NULL);
+>>>>>>> 57594ac1685a... net: Use RCU_INIT_POINTER() to set sk_wq
 
 		if (newsk->sk_prot->sockets_allocated)
 			sk_sockets_allocated_inc(newsk);
@@ -3452,3 +3456,4 @@ bool sk_busy_loop_end(void *p, unsigned long start_time)
 }
 EXPORT_SYMBOL(sk_busy_loop_end);
 #endif /* CONFIG_NET_RX_BUSY_POLL */
+

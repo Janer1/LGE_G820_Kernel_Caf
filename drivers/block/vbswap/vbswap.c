@@ -398,4 +398,3 @@ module_exit(vbswap_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Park Ju Hyung <qkrwngud825@gmail.com>");
 MODULE_DESCRIPTION("Virtual block swap device based on vnswap");
-
