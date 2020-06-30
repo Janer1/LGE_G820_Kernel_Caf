@@ -7944,7 +7944,7 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 		 */
 		if ((prefer_idle && best_idle_cpu != -1) ||
 		    (boosted && (best_idle_cpu != -1 || target_cpu != -1))) {
-			if (boosted) {
+			if (boosted && p->prio <= DEFAULT_PRIO) {
 				/*
 				 * For boosted task, stop searching when an idle
 				 * cpu is found in mid cluster.
