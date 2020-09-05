@@ -176,7 +176,7 @@ static const struct i2c_device_id dw7800_id[] = {
     { }
 };
 
-#if 0
+#if DW7800_REG_00
 static struct i2c_board_info info = {
     I2C_BOARD_INFO("dw7800", DEVICE_ADDR),
 };
@@ -619,16 +619,16 @@ release  : 2018.08.24
 int a2v_seq_write(u8* data, u32 size)
 {
 	/* call i2c bulk write func */
-#if 0
+#if DW7800_REG_00
 	if( haptic_status == false ) {
 		dw791x_seq_write(dw791x->rtp_input, 0x0, RAM_ADDR0, (u8*)data, size);
 	}
 #endif
     int ret;
 
-    if(is_immersion_haptic_on)
+    if(is_immersion_haptic_on) {
         return -1;
-
+    }
 	ret = I2CWrite(DW7800_DATA, size, data);
 
 	return ret;
