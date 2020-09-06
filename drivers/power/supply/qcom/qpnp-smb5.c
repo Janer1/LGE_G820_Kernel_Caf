@@ -1681,8 +1681,6 @@ static int smb5_dc_set_prop(struct power_supply *psy,
 static int smb5_dc_prop_is_writeable(struct power_supply *psy,
 		enum power_supply_property psp)
 {
-	int rc;
-
 	switch (psp) {
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION:
 		return 1;
