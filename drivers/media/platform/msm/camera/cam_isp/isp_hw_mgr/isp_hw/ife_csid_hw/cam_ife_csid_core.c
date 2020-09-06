@@ -15,6 +15,8 @@
 #include <uapi/media/cam_isp.h>
 #include <uapi/media/cam_defs.h>
 
+#include "cam_req_mgr_workq.h"
+#include "cam_isp_hw_mgr_intf.h"
 #include "cam_ife_csid_core.h"
 #include "cam_csid_ppi_core.h"
 #include "cam_isp_hw.h"
@@ -475,7 +477,7 @@ static int cam_ife_csid_global_reset(struct cam_ife_csid_hw *csid_hw)
 		CAM_ERR(CAM_ISP, "CSID:%d IRQ value after reset rc = %d",
 			csid_hw->hw_intf->hw_idx, val);
 	csid_hw->error_irq_count = 0;
-	csid_hw->prev_boot_timestamp = 0;
+	csid_hw->first_sof_ts = 0;
 
 	for (i = 0 ; i < CAM_IFE_PIX_PATH_RES_MAX; i++)
 		csid_hw->res_sof_cnt[i] = 0;
@@ -1027,6 +1029,8 @@ static int cam_ife_csid_path_reserve(struct cam_ife_csid_hw *csid_hw,
 			reserve->in_port->left_stop);
 	}
 
+	csid_hw->event_cb = reserve->event_cb;
+	csid_hw->ctx = reserve->ctx;
 	CAM_DBG(CAM_ISP, "Res %d width %d height %d", reserve->res_id,
 		path_data->width, path_data->height);
 	reserve->node_res = res;
@@ -1174,7 +1178,8 @@ static int cam_ife_csid_disable_hw(struct cam_ife_csid_hw *csid_hw)
 
 	csid_hw->hw_info->hw_state = CAM_HW_STATE_POWER_DOWN;
 	csid_hw->error_irq_count = 0;
-	csid_hw->prev_boot_timestamp = 0;
+	csid_hw->first_sof_ts = 0;
+	csid_hw->fatal_err_detected = false;
 
 	return rc;
 }
@@ -1885,10 +1890,12 @@ static int cam_ife_csid_enable_pxl_path(
 		is_ipp = true;
 		pxl_reg = csid_reg->ipp_reg;
 		path_config = &(csid_hw->ipp_path_config);
+		csid_hw->res_sof_cnt[CAM_IFE_PIX_PATH_RES_IPP] = 0;
 	} else {
 		is_ipp = false;
 		pxl_reg = csid_reg->ppp_reg;
 		path_config = &(csid_hw->ppp_path_config);
+		csid_hw->res_sof_cnt[CAM_IFE_PIX_PATH_RES_PPP] = 0;
 	}
 
 	if (res->res_state != CAM_ISP_RESOURCE_STATE_INIT_HW) {
@@ -2292,6 +2299,7 @@ static int cam_ife_csid_enable_rdi_path(
 			res->res_type, res->res_id, res->res_state);
 		return -EINVAL;
 	}
+	csid_hw->res_sof_cnt[res->res_id] = 0;
 
 	if (path_data->usage_type)
 		path_data->init_frame_drop = csid_hw->init_frame_drop + 1;
@@ -2513,7 +2521,6 @@ static int cam_ife_csid_get_time_stamp(
 	const struct cam_ife_csid_rdi_reg_offset   *rdi_reg;
 	struct timespec64 ts;
 	uint32_t  time_32, id;
-	uint64_t  time_delta;
 
 	time_stamp = (struct cam_csid_get_time_stamp_args  *)cmd_args;
 	res = time_stamp->node_res;
@@ -2567,24 +2574,16 @@ static int cam_ife_csid_get_time_stamp(
 		CAM_IFE_CSID_QTIMER_MUL_FACTOR,
 		CAM_IFE_CSID_QTIMER_DIV_FACTOR);
 
-	if (!csid_hw->prev_boot_timestamp) {
+	if (!csid_hw->first_sof_ts) {
 		get_monotonic_boottime64(&ts);
 		time_stamp->boot_timestamp =
 			(uint64_t)((ts.tv_sec * 1000000000) +
 			ts.tv_nsec);
-		csid_hw->prev_qtimer_ts = 0;
 		CAM_DBG(CAM_ISP, "timestamp:%lld",
 			time_stamp->boot_timestamp);
-	} else {
-		time_delta = time_stamp->time_stamp_val -
-			csid_hw->prev_qtimer_ts;
-		time_stamp->boot_timestamp =
-			csid_hw->prev_boot_timestamp + time_delta;
-	}
-
-	csid_hw->prev_qtimer_ts = time_stamp->time_stamp_val;
-	csid_hw->prev_boot_timestamp = time_stamp->boot_timestamp;
-
+		csid_hw->first_sof_ts = 1;
+	} else
+		time_stamp->boot_timestamp = 0;
 
 	return 0;
 }
@@ -3389,7 +3388,110 @@ static int cam_ife_csid_process_cmd(void *hw_priv,
 	}
 
 	return rc;
+}
 
+static char *cam_csid_status_to_str(uint32_t status)
+{
+	switch (status) {
+	case CSID_IRQ_STATUS_TOP:
+		return "TOP";
+	case CSID_IRQ_STATUS_RX:
+		return "RX";
+	case CSID_IRQ_STATUS_IPP:
+		return "IPP";
+	case CSID_IRQ_STATUS_PPP:
+		return "PPP";
+	case CSID_IRQ_STATUS_RDI0:
+		return "RDI0";
+	case CSID_IRQ_STATUS_RDI1:
+		return "RDI1";
+	case CSID_IRQ_STATUS_RDI2:
+		return "RDI2";
+	case CSID_IRQ_STATUS_RDI3:
+		return "RDI3";
+	default:
+		return "Invalid IRQ";
+	}
+}
+
+static int cam_csid_event_dispatch_process(void *priv, void *data)
+{
+	struct cam_csid_hw_evt_payload evt_payload;
+	struct cam_ife_csid_hw *csid_hw;
+	struct cam_csid_hw_work_data *work_data;
+	int rc = 0;
+	int i;
+
+	csid_hw = (struct cam_ife_csid_hw *)priv;
+	if (!csid_hw) {
+		CAM_ERR(CAM_ISP, "Invalid parameters");
+		return -EINVAL;
+	}
+	if (!csid_hw->event_cb) {
+		CAM_ERR(CAM_ISP, "hw_idx %d Error Cb not registered",
+			csid_hw->hw_intf->hw_idx);
+		return -EINVAL;
+	}
+	work_data = (struct cam_csid_hw_work_data *)data;
+	CAM_ERR_RATE_LIMIT(CAM_ISP, "idx %d err %d phy %d",
+		csid_hw->hw_intf->hw_idx,
+		work_data->evt_type,
+		csid_hw->csi2_rx_cfg.phy_sel);
+
+	for (i = 0; i < CSID_IRQ_STATUS_MAX; i++)
+		CAM_ERR_RATE_LIMIT(CAM_ISP, "status %s: %x",
+			cam_csid_status_to_str(i),
+			work_data->irq_status[i]);
+
+	evt_payload.hw_idx = csid_hw->hw_intf->hw_idx;
+	evt_payload.evt_type = work_data->evt_type;
+
+	switch (work_data->evt_type) {
+	case CAM_ISP_HW_ERROR_CSID_FATAL:
+		if (csid_hw->fatal_err_detected)
+			break;
+		csid_hw->fatal_err_detected = true;
+		rc = csid_hw->event_cb(csid_hw->ctx,
+			CAM_ISP_HW_EVENT_ERROR, &evt_payload);
+		break;
+
+	case CAM_ISP_HW_ERROR_CSID_NON_FATAL:
+		break;
+	default:
+		CAM_DBG(CAM_ISP, "CSID[%d] invalid error type %d",
+			csid_hw->hw_intf->hw_idx,
+			work_data->evt_type);
+		break;
+	}
+	return rc;
+}
+
+static int cam_csid_dispatch_irq(struct cam_ife_csid_hw *csid_hw,
+	int evt_type, uint32_t *irq_status)
+{
+	struct crm_workq_task *task;
+	struct cam_csid_hw_work_data *work_data;
+	int rc = 0;
+	int i;
+
+	CAM_DBG(CAM_ISP, "CSID[%d] error %d",
+		csid_hw->hw_intf->hw_idx, evt_type);
+
+	task = cam_req_mgr_workq_get_task(csid_hw->work);
+	if (!task) {
+		CAM_ERR(CAM_ISP, "Can not get task for worker");
+		return -ENOMEM;
+	}
+	work_data = (struct cam_csid_hw_work_data *)task->payload;
+	work_data->evt_type = evt_type;
+	for (i = 0; i < CSID_IRQ_STATUS_MAX; i++)
+		work_data->irq_status[i] = irq_status[i];
+
+	task->process_cb = cam_csid_event_dispatch_process;
+	rc = cam_req_mgr_workq_enqueue_task(task, csid_hw,
+		CRM_TASK_PRIORITY_0);
+
+	return rc;
 }
 
 irqreturn_t cam_ife_csid_irq(int irq_num, void *data)
@@ -3509,6 +3611,10 @@ irqreturn_t cam_ife_csid_irq(int irq_num, void *data)
 		CAM_IFE_CSID_MAX_IRQ_ERROR_COUNT) {
 		fatal_err_detected = true;
 		csid_hw->error_irq_count = 0;
+	} else if (csid_hw->error_irq_count) {
+		cam_csid_dispatch_irq(csid_hw,
+			CAM_ISP_HW_ERROR_CSID_NON_FATAL,
+			irq_status);
 	}
 
 handle_fatal_error:
@@ -3519,6 +3625,9 @@ handle_fatal_error:
 			csid_hw->hw_intf->hw_idx, csid_hw->csi2_cfg_cnt,
 			irq_status_rx);
 		cam_ife_csid_halt_csi2(csid_hw);
+		cam_csid_dispatch_irq(csid_hw,
+			CAM_ISP_HW_ERROR_CSID_FATAL,
+			irq_status);
 	}
 
 	if (csid_hw->csid_debug & CSID_DEBUG_ENABLE_EOT_IRQ) {
@@ -3926,6 +4035,7 @@ int cam_ife_csid_hw_probe_init(struct cam_hw_intf  *csid_hw_intf,
 	struct cam_ife_csid_cid_data         *cid_data;
 	struct cam_hw_info                   *csid_hw_info;
 	struct cam_ife_csid_hw               *ife_csid_hw = NULL;
+	char worker_name[128];
 
 	if (csid_idx >= CAM_IFE_CSID_HW_RES_MAX) {
 		CAM_ERR(CAM_ISP, "Invalid csid index:%d", csid_idx);
@@ -4047,7 +4157,7 @@ int cam_ife_csid_hw_probe_init(struct cam_hw_intf  *csid_hw_intf,
 
 	ife_csid_hw->csid_debug = 0;
 	ife_csid_hw->error_irq_count = 0;
-	ife_csid_hw->prev_boot_timestamp = 0;
+	ife_csid_hw->first_sof_ts = 0;
 	ife_csid_hw->ipp_path_config.measure_enabled = 0;
 	ife_csid_hw->ppp_path_config.measure_enabled = 0;
 	for (i = 0; i <= CAM_IFE_PIX_PATH_RES_RDI_3; i++)
@@ -4069,6 +4179,21 @@ int cam_ife_csid_hw_probe_init(struct cam_hw_intf  *csid_hw_intf,
 			break;
 		}
 	}
+	snprintf(worker_name, sizeof(worker_name),
+		"csid%u_worker", ife_csid_hw->hw_intf->hw_idx);
+	CAM_DBG(CAM_ISP, "Create CSID worker %s", worker_name);
+	rc = cam_req_mgr_workq_create(worker_name,
+		CAM_CSID_WORKQ_NUM_TASK,
+		&ife_csid_hw->work, CRM_WORKQ_USAGE_IRQ, 0);
+	if (rc) {
+		CAM_ERR(CAM_ISP, "Unable to create a workq, rc=%d", rc);
+		goto err;
+	}
+	for (i = 0; i < CAM_CSID_WORKQ_NUM_TASK; i++)
+		ife_csid_hw->work->task.pool[i].payload =
+			&ife_csid_hw->work_data[i];
+
+	return 0;
 err:
 	if (rc) {
 		kfree(ife_csid_hw->ipp_res.res_priv);
@@ -4109,6 +4234,6 @@ int cam_ife_csid_hw_deinit(struct cam_ife_csid_hw *ife_csid_hw)
 		kfree(ife_csid_hw->cid_res[i].res_priv);
 
 	cam_ife_csid_deinit_soc_resources(&ife_csid_hw->hw_info->soc_info);
-
+	cam_req_mgr_workq_destroy(&ife_csid_hw->work);
 	return 0;
 }

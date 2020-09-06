@@ -407,6 +407,7 @@ static void dp_display_hdcp_cb_work(struct work_struct *work)
 			return;
 		}
 	}
+
 	status = &dp->link->hdcp_status;
 
 	if (status->hdcp_state == HDCP_STATE_INACTIVE) {
@@ -1020,6 +1021,7 @@ static int dp_display_process_hpd_low(struct dp_display_private *dp)
 	if (!dp->active_stream_cnt)
 		dp->ctrl->off(dp->ctrl);
 	mutex_unlock(&dp->session_lock);
+
 	dp->panel->video_test = false;
 
 #if IS_ENABLED(CONFIG_LGE_COVER_DISPLAY)
@@ -1049,6 +1051,27 @@ static int dp_display_usbpd_configure_cb(struct device *dev)
 		pr_err("no driver data found\n");
 		rc = -ENODEV;
 		goto end;
+	}
+
+	/*
+	 * When dp is connected during boot, there is a chance that
+	 * configure_cb is called before drm probe is finished and
+	 * cause host_init failure. Here we poll the value of
+	 * poll_enabled and wait until drm driver is ready.
+	 */
+	if (!dp->dp_display.drm_dev->mode_config.poll_enabled) {
+		const int poll_timeout = 10000;
+		int i;
+
+		for (i = 0; !dp->dp_display.drm_dev->mode_config.poll_enabled &&
+				i < poll_timeout; i++)
+			usleep_range(1000, 1100);
+
+		if (i == poll_timeout) {
+			pr_err("driver is not loaded\n");
+			rc = -ENODEV;
+			goto end;
+		}
 	}
 
 #if IS_ENABLED(CONFIG_LGE_COVER_DISPLAY)
@@ -1086,6 +1109,7 @@ static int dp_display_stream_pre_disable(struct dp_display_private *dp,
 			struct dp_panel *dp_panel)
 {
 	dp->ctrl->stream_pre_off(dp->ctrl, dp_panel);
+
 	return 0;
 }
 
@@ -1174,7 +1198,7 @@ static int dp_display_handle_disconnect(struct dp_display_private *dp)
 	}
 
 	mutex_lock(&dp->session_lock);
-	if (rc && dp->power_on)
+	if (dp->power_on)
 		dp_display_clean(dp);
 
 	dp_display_host_deinit(dp);
@@ -2461,7 +2485,7 @@ static int dp_display_init_aux_switch(struct dp_display_private *dp)
 
 	nb.notifier_call = dp_display_fsa4480_callback;
 	nb.priority = 0;
-/*
+
 	rc = fsa4480_reg_notifier(&nb, dp->aux_switch_node);
 	if (rc) {
 		pr_err("failed to register notifier (%d)\n", rc);
@@ -2469,7 +2493,6 @@ static int dp_display_init_aux_switch(struct dp_display_private *dp)
 	}
 
 	fsa4480_unreg_notifier(&nb, dp->aux_switch_node);
-*/
 end:
 	return rc;
 }
@@ -2949,6 +2972,7 @@ static int dp_display_probe(struct platform_device *pdev)
 		pr_err("component add failed, rc=%d\n", rc);
 		goto error;
 	}
+
 	return 0;
 error:
 	devm_kfree(&pdev->dev, dp);
