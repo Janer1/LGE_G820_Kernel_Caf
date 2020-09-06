@@ -164,7 +164,7 @@ static struct smb_params smb5_pm8150b_params = {
 		.name   = "DC input current limit",
 		.reg    = DCDC_CFG_REF_MAX_PSNS_REG,
 		.min_u  = 0,
-		.max_u  = 1500000,
+		.max_u  = DCIN_ICL_MAX_UA,
 		.step_u = 50000,
 	},
 	.jeita_cc_comp_hot	= {
@@ -255,6 +255,7 @@ static int __weak_chg_icl_ua = 500000;
 module_param_named(
 	weak_chg_icl_ua, __weak_chg_icl_ua, int, 0600
 );
+
 enum {
 	BAT_THERM = 0,
 	MISC_THERM,
@@ -470,7 +471,7 @@ static int smb5_parse_dt(struct smb5 *chip)
 {
 	struct smb_charger *chg = &chip->chg;
 	struct device_node *node = chg->dev->of_node;
-	int rc, byte_len;
+	int rc, byte_len, tmp;
 
 	if (!node) {
 		pr_err("device tree node missing\n");
@@ -729,6 +730,12 @@ static int smb5_parse_dt(struct smb5 *chip)
 					&chg->chg_param.hvdcp3_max_icl_ua);
 	if (chg->chg_param.hvdcp3_max_icl_ua <= 0)
 		chg->chg_param.hvdcp3_max_icl_ua = MICRO_3PA;
+
+	chg->wls_icl_ua = DCIN_ICL_MAX_UA;
+	rc = of_property_read_u32(node, "qcom,wls-current-max-ua",
+			&tmp);
+	if (!rc && tmp < DCIN_ICL_MAX_UA)
+		chg->wls_icl_ua = tmp;
 
 	return 0;
 }
@@ -1323,6 +1330,7 @@ static enum power_supply_property smb5_usb_main_props[] = {
 	POWER_SUPPLY_PROP_FORCE_MAIN_ICL,
 	POWER_SUPPLY_PROP_COMP_CLAMP_LEVEL,
 	POWER_SUPPLY_PROP_HEALTH,
+	POWER_SUPPLY_PROP_HOT_TEMP,
 };
 
 static int smb5_usb_main_get_prop(struct power_supply *psy,
@@ -1385,6 +1393,10 @@ static int smb5_usb_main_get_prop(struct power_supply *psy,
 	/* Use this property to report SMB health */
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = smblib_get_prop_smb_health(chg);
+		break;
+	/* Use this property to report overheat status */
+	case POWER_SUPPLY_PROP_HOT_TEMP:
+		val->intval = chg->thermal_overheat;
 		break;
 	default:
 		pr_debug("get prop %d is not supported in usb-main\n", psp);
@@ -1465,6 +1477,9 @@ static int smb5_usb_main_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_FORCE_MAIN_FCC:
 		vote_override(chg->fcc_main_votable, CC_MODE_VOTER,
 				(val->intval < 0) ? false : true, val->intval);
+		if (val->intval >= 0)
+			chg->chg_param.forced_main_fcc = val->intval;
+
 		/* Main FCC updated re-calculate FCC */
 		rerun_election(chg->fcc_votable);
 		break;
@@ -1477,6 +1492,9 @@ static int smb5_usb_main_set_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_COMP_CLAMP_LEVEL:
 		rc = smb5_set_prop_comp_clamp_level(chg, val);
+		break;
+	case POWER_SUPPLY_PROP_HOT_TEMP:
+		rc = smblib_set_prop_thermal_overheat(chg, val->intval);
 		break;
 	default:
 		pr_err("set prop %d is not supported\n", psp);
@@ -1498,6 +1516,7 @@ static int smb5_usb_main_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_FORCE_MAIN_FCC:
 	case POWER_SUPPLY_PROP_FORCE_MAIN_ICL:
 	case POWER_SUPPLY_PROP_COMP_CLAMP_LEVEL:
+	case POWER_SUPPLY_PROP_HOT_TEMP:
 		rc = 1;
 		break;
 	default:
@@ -1649,12 +1668,13 @@ static int smb5_dc_prop_is_writeable(struct power_supply *psy,
 	int rc;
 
 	switch (psp) {
+	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION:
+		return 1;
 	default:
-		rc = 0;
 		break;
 	}
 
-	return rc;
+	return 0;
 }
 
 static const struct power_supply_desc dc_psy_desc = {
@@ -1744,6 +1764,7 @@ static enum power_supply_property smb5_batt_props[] = {
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
 };
 
+#define DEBUG_ACCESSORY_TEMP_DECIDEGC	250
 static int smb5_batt_get_prop(struct power_supply *psy,
 		enum power_supply_property psp,
 		union power_supply_propval *val)
@@ -1824,7 +1845,11 @@ static int smb5_batt_get_prop(struct power_supply *psy,
 		rc = smblib_get_prop_batt_iterm(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		rc = smblib_get_prop_from_bms(chg, POWER_SUPPLY_PROP_TEMP, val);
+		if (chg->typec_mode == POWER_SUPPLY_TYPEC_SINK_DEBUG_ACCESSORY)
+			val->intval = DEBUG_ACCESSORY_TEMP_DECIDEGC;
+		else
+			rc = smblib_get_prop_from_bms(chg,
+						POWER_SUPPLY_PROP_TEMP, val);
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;
@@ -3401,8 +3426,9 @@ static struct smb_irq_info smb5_irqs[] = {
 		.handler	= override_dc_uv_irq_handler,
 		.storm_data	= {true, 500, 8},
 #else
-		.handler	= default_irq_handler,
+		.handler	= dcin_uv_irq_handler,
 #endif
+		.wake		= true,
 	},
 	[DCIN_OV_IRQ] = {
 		.name		= "dcin-ov",
@@ -4091,5 +4117,5 @@ module_platform_driver(smb5_driver);
 #include "../lge/extension-smb5.c"
 #endif
 
-MODULE_DESCRIPTION("QPNP SMB2 Charger Driver");
+MODULE_DESCRIPTION("QPNP SMB5 Charger Driver");
 MODULE_LICENSE("GPL v2");
