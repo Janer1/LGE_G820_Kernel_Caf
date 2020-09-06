@@ -1141,18 +1141,16 @@ static int mtp_send_event(struct mtp_dev *dev, struct mtp_event *event)
 	int ret;
 	int length = event->length;
 
-	mtp_log("(%zu)\n", event->length);
+	mtp_log("enter: (%zu)\n", event->length);
 
 	if (length < 0 || length > INTR_BUFFER_SIZE)
 		return -EINVAL;
 	if (dev->state == STATE_OFFLINE)
 		return -ENODEV;
 
-	ret = wait_event_interruptible_timeout(dev->intr_wq,
-			(req = mtp_req_get(dev, &dev->intr_idle)),
-			msecs_to_jiffies(1000));
+	req = mtp_req_get(dev, &dev->intr_idle);
 	if (!req)
-		return -ETIME;
+		return -EBUSY;
 
 	if (copy_from_user(req->buf, (void __user *)event->data, length)) {
 		mtp_req_put(dev, &dev->intr_idle, req);
@@ -1163,6 +1161,7 @@ static int mtp_send_event(struct mtp_dev *dev, struct mtp_event *event)
 	if (ret)
 		mtp_req_put(dev, &dev->intr_idle, req);
 
+	mtp_log("exit: (%d)\n", ret);
 	return ret;
 }
 
@@ -1202,6 +1201,8 @@ static long mtp_send_receive_ioctl(struct file *fp, unsigned int code,
 	struct file *filp = NULL;
 	struct work_struct *work;
 	int ret = -EINVAL;
+
+	mtp_log("entering ioctl with state: %d\n", dev->state);
 
 #ifdef CONFIG_LGE_USB_GADGET
 	if (mtp_lock(&dev->ioctl_excl)) {
@@ -1688,7 +1689,6 @@ mtp_function_unbind(struct usb_configuration *c, struct usb_function *f)
 	dev->state = STATE_OFFLINE;
 	dev->cdev = NULL;
 	spin_unlock_irq(&dev->lock);
-
 	kfree(f->os_desc_table);
 	f->os_desc_n = 0;
 #ifndef CONFIG_LGE_USB_GADGET_MULTI_CONFIG
