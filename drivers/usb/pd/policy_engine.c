@@ -1720,7 +1720,7 @@ static void reset_vdm_state(struct usbpd *pd)
 	mutex_lock(&pd->svid_handler_lock);
 	list_for_each_entry(handler, &pd->svid_handlers, entry) {
 		if (handler->discovered) {
-			usbpd_info(&pd->dev, "Notify SVID: 0x%04x disconnect\n",
+			usbpd_dbg(&pd->dev, "Notify SVID: 0x%04x disconnect\n",
 				handler->svid);
 			handler->disconnect(handler);
 			handler->discovered = false;
@@ -2626,7 +2626,7 @@ static void handle_vdm_rx(struct usbpd *pd, struct rx_msg *rx_msg)
 				if (svid) {
 					handler = find_svid_handler(pd, svid);
 					if (handler) {
-						usbpd_info(&pd->dev, "Notify SVID: 0x%04x connect\n",
+						usbpd_dbg(&pd->dev, "Notify SVID: 0x%04x connect\n",
 							handler->svid);
 						handler->connect(handler,
 							pd->peer_usb_comm);
