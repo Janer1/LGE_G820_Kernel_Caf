@@ -6635,6 +6635,7 @@ irqreturn_t typec_attach_detach_irq_handler(int irq, void *data)
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
 	u8 stat;
+	bool attached = false;
 	int rc;
 
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
@@ -6649,7 +6650,8 @@ irqreturn_t typec_attach_detach_irq_handler(int irq, void *data)
 	smblib_dbg(chg, PR_REGISTER, "TYPE_C_STATE_MACHINE_STATUS = 0x%02x\n", stat);
 #endif
 
-	if (stat & TYPEC_ATTACH_DETACH_STATE_BIT) {
+	attached = !!(stat & TYPEC_ATTACH_DETACH_STATE_BIT);
+	if (attached) {
 #ifdef CONFIG_LGE_USB_MOISTURE_DETECTION
 		smblib_dbg(chg, PR_MISC, "LPD_STAGE_FLOAT_CANCEL\n");
 #endif
@@ -6724,6 +6726,13 @@ irqreturn_t typec_attach_detach_irq_handler(int irq, void *data)
 			schedule_delayed_work(&chg->lpd_detach_work,
 					msecs_to_jiffies(1000));
 	}
+
+	rc = smblib_masked_write(chg, USB_CMD_PULLDOWN_REG,
+			EN_PULLDOWN_USB_IN_BIT,
+			attached ?  0 : EN_PULLDOWN_USB_IN_BIT);
+	if (rc < 0)
+		smblib_err(chg, "Couldn't configure pulldown on USB_IN rc=%d\n",
+				rc);
 
 	power_supply_changed(chg->usb_psy);
 	if (chg->dual_role)
