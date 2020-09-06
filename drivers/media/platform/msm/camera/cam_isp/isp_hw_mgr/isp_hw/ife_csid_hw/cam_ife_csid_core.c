@@ -3509,6 +3509,7 @@ irqreturn_t cam_ife_csid_irq(int irq_num, void *data)
 	bool fatal_err_detected = false;
 	uint32_t sof_irq_debug_en = 0;
 	unsigned long flags;
+	uint32_t irq_status[CSID_IRQ_STATUS_MAX] = {0};
 
 	if (!data) {
 		CAM_ERR(CAM_ISP, "CSID: Invalid arguments");

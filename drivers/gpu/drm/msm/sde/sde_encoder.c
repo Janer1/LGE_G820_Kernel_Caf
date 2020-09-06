@@ -4829,7 +4829,6 @@ void sde_encoder_prepare_commit(struct drm_encoder *drm_enc)
 	struct sde_encoder_phys *phys;
 	int i;
 	struct sde_hw_ctl *ctl;
-	int rc = 0;
 
 	if (!drm_enc) {
 		SDE_ERROR("invalid encoder\n");

@@ -29,6 +29,7 @@
 
 #define FG_GEN4_DEV_NAME	"qcom,fg-gen4"
 #define TTF_AWAKE_VOTER		"fg_ttf_awake"
+#define DEBUG_BOARD_VOTER		"DEBUG_BOARD_VOTER"
 
 #define PERPH_SUBTYPE_REG		0x05
 #define FG_BATT_SOC_PM8150B		0x10
