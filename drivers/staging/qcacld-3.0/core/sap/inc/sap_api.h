@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -504,6 +504,8 @@ struct sap_acs_cfg {
 	uint8_t    end_ch;
 	uint8_t    *ch_list;
 	uint8_t    ch_list_count;
+	uint8_t    *master_ch_list;
+	uint8_t    master_ch_list_count;
 #ifdef FEATURE_WLAN_AP_AP_ACS_OPTIMIZE
 	uint8_t    skip_scan_status;
 	uint8_t    skip_scan_range1_stch;

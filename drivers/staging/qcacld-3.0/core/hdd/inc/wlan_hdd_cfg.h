@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -615,12 +615,48 @@ enum hdd_dot11_mode {
 
 /*
  * <ini>
- * wake_lock_in_user_scan - use wake lock during user scan
+ * honour_nl_scan_policy_flags - Whether to honour NL80211 scan policy flags
+ * @Min: 0
+ * @Max: 1
+ * @Default: 1
+ *
+ * This parameter will decide whether to honour scan flags such as
+ * NL80211_SCAN_FLAG_HIGH_ACCURACY , NL80211_SCAN_FLAG_LOW_SPAN,
+ * NL80211_SCAN_FLAG_LOW_POWER.
+ * Acceptable values for this:
+ * 0: Config is disabled
+ * 1: Config is enabled
+ *
+ * Related: None
+ *
+ * Supported Feature: Scan
+ *
+ * Usage: Internal
+ *
+ * </ini>
+ */
+#define CFG_HONOUR_NL_SCAN_POLICY_FLAGS           "honour_nl_scan_policy_flags"
+#define CFG_HONOUR_NL_SCAN_POLICY_FLAGS_MIN       (0)
+#define CFG_HONOUR_NL_SCAN_POLICY_FLAGS_MAX       (1)
+#define CFG_HONOUR_NL_SCAN_POLICY_FLAGS_DEFAULT   (1)
+
+/*
+ * <ini>
+ * wake_lock_in_user_scan - use to acquire wake lock during user scan
  * @Min: 0
  * @Max: 1
  * @Default: 0
  *
  * This ini is used to define if wake lock is held used during user scan req
+ * This INI is added for a specific OEM on their request, who don’t want to
+ * use PNO offload scan (sched scans). This is useful only if PNO scan offload
+ * is disabled. If PNO scan is enabled this INI should be disabled and its
+ * by default disabled intentionally.
+ * This is used to acquire wake lock to handle the case where PNO scan offload
+ * is disabled so that wlan is not suspended during scan before connect and
+ * thus scan is not aborted in between. In case PNO scan is offloaded, the FW
+ * will take care of connect scans and will wake up host when candidate is found
+ *
  *
  * Related: Scan
  *
@@ -16365,6 +16401,7 @@ struct hdd_config {
 	uint8_t enableBypass11d;
 	uint8_t enableDFSChnlScan;
 	bool wake_lock_in_user_scan;
+	bool honour_nl_scan_policy_flags;
 	uint8_t enable_dfs_pno_chnl_scan;
 	uint8_t enableDynamicDTIM;
 	uint8_t ShortGI40MhzEnable;
@@ -16748,6 +16785,7 @@ struct hdd_config {
 	uint8_t tsf_ptp_options;
 #endif /* WLAN_FEATURE_TSF_PLUS */
 #endif
+	bool enable_three_way_coex_config_legacy;
 	uint32_t roam_dense_traffic_thresh;
 	uint32_t roam_dense_rssi_thresh_offset;
 	bool ignore_peer_ht_opmode;
@@ -16905,6 +16943,7 @@ struct hdd_config {
 	enum hdd_external_acs_policy external_acs_policy;
 	/* threshold of packet drops at which FW initiates disconnect */
 	uint16_t pkt_err_disconn_th;
+	enum force_1x1_type is_force_1x1_enable;
 	bool is_force_1x1;
 	uint8_t enable_rts_sifsbursting;
 	uint8_t max_mpdus_inampdu;

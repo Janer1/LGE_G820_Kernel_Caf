@@ -56,6 +56,7 @@
 #include <wlan_action_oui_ucfg_api.h>
 #include <wlan_utility.h>
 #include "wlan_mlme_main.h"
+#include <wlan_cp_stats_mc_ucfg_api.h>
 
 #define MAX_PWR_FCC_CHAN_12 8
 #define MAX_PWR_FCC_CHAN_13 2

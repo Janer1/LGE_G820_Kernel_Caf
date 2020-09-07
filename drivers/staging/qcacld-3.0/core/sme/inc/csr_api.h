@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -67,6 +67,8 @@ typedef enum {
 	eCSR_AUTH_TYPE_OWE,
 	eCSR_AUTH_TYPE_SUITEB_EAP_SHA256,
 	eCSR_AUTH_TYPE_SUITEB_EAP_SHA384,
+	eCSR_AUTH_TYPE_FT_SAE,
+	eCSR_AUTH_TYPE_FT_SUITEB_EAP_SHA384,
 	eCSR_NUM_OF_SUPPORT_AUTH_TYPE,
 	eCSR_AUTH_TYPE_FAILED = 0xff,
 	eCSR_AUTH_TYPE_UNKNOWN = eCSR_AUTH_TYPE_FAILED,
