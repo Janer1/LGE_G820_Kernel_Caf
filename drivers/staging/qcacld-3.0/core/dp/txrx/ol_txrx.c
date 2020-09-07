@@ -3987,7 +3987,9 @@ void peer_unmap_timer_work_function(void *param)
 void peer_unmap_timer_handler(void *data)
 {
 	ol_txrx_peer_handle peer = (ol_txrx_peer_handle)data;
-	ol_txrx_pdev_handle txrx_pdev = cds_get_context(QDF_MODULE_ID_TXRX);
+
+	if (!peer)
+		return;
 
 	ol_txrx_err("all unmap events not received for peer %pK, ref_cnt %d",
 		    peer, qdf_atomic_read(&peer->ref_cnt));
@@ -3996,16 +3998,8 @@ void peer_unmap_timer_handler(void *data)
 		    peer->mac_addr.raw[0], peer->mac_addr.raw[1],
 		    peer->mac_addr.raw[2], peer->mac_addr.raw[3],
 		    peer->mac_addr.raw[4], peer->mac_addr.raw[5]);
-	if (!cds_is_driver_recovering() && !cds_is_fw_down()) {
-		qdf_create_work(0, &txrx_pdev->peer_unmap_timer_work,
-				peer_unmap_timer_work_function,
-				peer);
-		/* Make sure peer is present before scheduling work */
-		ol_txrx_peer_get_ref(peer, PEER_DEBUG_ID_OL_UNMAP_TIMER_WORK);
-		qdf_sched_work(0, &txrx_pdev->peer_unmap_timer_work);
-	} else {
-		ol_txrx_err("Recovery is in progress, ignore!");
-	}
+
+	cds_trigger_recovery(QDF_PEER_UNMAP_TIMEDOUT);
 }
 
 
