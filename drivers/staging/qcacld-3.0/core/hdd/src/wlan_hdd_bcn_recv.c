@@ -139,7 +139,7 @@ static void hdd_send_bcn_recv_info(hdd_handle_t hdd_handle,
 
 	vendor_event =
 		cfg80211_vendor_event_alloc(
-			hdd_ctx->wiphy, &(adapter->wdev),
+			hdd_ctx->wiphy, NULL,
 			data_len,
 			QCA_NL80211_VENDOR_SUBCMD_BEACON_REPORTING_INDEX,
 			flags);
@@ -443,7 +443,7 @@ void hdd_beacon_recv_pause_indication(hdd_handle_t hdd_handle,
 
 	vendor_event =
 		cfg80211_vendor_event_alloc(
-			hdd_ctx->wiphy, &(adapter->wdev),
+			hdd_ctx->wiphy, NULL,
 			data_len,
 			QCA_NL80211_VENDOR_SUBCMD_BEACON_REPORTING_INDEX,
 			flags);
@@ -512,7 +512,7 @@ void hdd_beacon_recv_pause_indication(hdd_handle_t hdd_handle,
 	 * the QCA_WLAN_VENDOR_ATTR_BEACON_REPORTING_AUTO_RESUMES shall not be
 	 * set by the driver.
 	 */
-	if (!is_disconnected && !do_not_resume)
+	if (!is_disconnected || !do_not_resume)
 		if (nla_put_flag(vendor_event,
 			QCA_WLAN_VENDOR_ATTR_BEACON_REPORTING_AUTO_RESUMES)) {
 			hdd_err("QCA_WLAN_VENDOR_ATTR put fail");
