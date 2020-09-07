@@ -1388,15 +1388,13 @@ int wlan_cfg80211_scan(struct wlan_objmgr_vdev *vdev,
 		req->scan_req.p2p_scan_type = SCAN_P2P_SEARCH;
 
 	/* Set dwell time mode according to scan policy type flags */
-	if (ucfg_scan_cfg_honour_nl_scan_policy_flags(psoc)) {
-		if (req->scan_req.scan_policy_high_accuracy)
-			req->scan_req.adaptive_dwell_time_mode =
-						SCAN_DWELL_MODE_STATIC;
-		if (req->scan_req.scan_policy_low_power ||
-		    req->scan_req.scan_policy_low_span)
-			req->scan_req.adaptive_dwell_time_mode =
-						SCAN_DWELL_MODE_AGGRESSIVE;
-	}
+	if (req->scan_req.scan_policy_high_accuracy)
+		req->scan_req.adaptive_dwell_time_mode =
+					SCAN_DWELL_MODE_STATIC;
+	if ((req->scan_req.scan_policy_low_power) ||
+	   (req->scan_req.scan_policy_low_span))
+		req->scan_req.adaptive_dwell_time_mode =
+					SCAN_DWELL_MODE_AGGRESSIVE;
 
 	/*
 	 * FW require at least 1 MAC to send probe request.
@@ -1956,47 +1954,10 @@ struct cfg80211_bss *wlan_cfg80211_get_bss(struct wiphy *wiphy,
 }
 #endif
 
-void __wlan_cfg80211_unlink_bss_list(struct wiphy *wiphy, uint8_t *bssid,
-				     uint8_t *ssid, uint8_t ssid_len)
-{
-	struct cfg80211_bss *bss = NULL;
-
-	bss = wlan_cfg80211_get_bss(wiphy, NULL, bssid,
-				    ssid, ssid_len);
-	if (!bss) {
-		cfg80211_info("BSS %pM not found", bssid);
-	} else {
-		cfg80211_debug("unlink entry for ssid:%.*s and BSSID %pM",
-			   ssid_len, ssid, bssid);
-		cfg80211_unlink_bss(wiphy, bss);
-		wlan_cfg80211_put_bss(wiphy, bss);
-	}
-
-	/*
-	 * Kernel creates separate entries into it's bss list for probe resp
-	 * and beacon for hidden AP. Both have separate ref count and thus
-	 * deleting one will not delete other entry.
-	 * If beacon entry of the hidden AP is not deleted and AP switch to
-	 * broadcasting SSID from Hiding SSID, kernel will reject the beacon
-	 * entry. So unlink the hidden beacon entry (if present) as well from
-	 * kernel, to avoid such issue.
-	 */
-	bss = wlan_cfg80211_get_bss(wiphy, NULL, bssid, NULL, 0);
-	if (!bss) {
-		cfg80211_debug("Hidden bss not found for Ssid:%.*s BSSID: %pM sid_len %d",
-			   ssid_len, ssid, bssid, ssid_len);
-	} else {
-		cfg80211_debug("unlink entry for Hidden ssid:%.*s and BSSID %pM",
-			   ssid_len, ssid, bssid);
-
-		cfg80211_unlink_bss(wiphy, bss);
-		/* cfg80211_get_bss get bss with ref count so release it */
-		wlan_cfg80211_put_bss(wiphy, bss);
-	}
-}
 void wlan_cfg80211_unlink_bss_list(struct wlan_objmgr_pdev *pdev,
 				   struct scan_cache_entry *scan_entry)
 {
+	struct cfg80211_bss *bss = NULL;
 	struct pdev_osif_priv *pdev_ospriv = wlan_pdev_get_ospriv(pdev);
 	struct wiphy *wiphy;
 
@@ -2006,8 +1967,15 @@ void wlan_cfg80211_unlink_bss_list(struct wlan_objmgr_pdev *pdev,
 	}
 
 	wiphy = pdev_ospriv->wiphy;
-
-	__wlan_cfg80211_unlink_bss_list(wiphy, scan_entry->bssid.bytes,
-					scan_entry->ssid.ssid,
-					scan_entry->ssid.length);
+	bss = wlan_cfg80211_get_bss(wiphy, NULL, scan_entry->bssid.bytes,
+				    scan_entry->ssid.ssid,
+				    scan_entry->ssid.length);
+	if (!bss) {
+		cfg80211_err("BSS %pM not found", scan_entry->bssid.bytes);
+	} else {
+		cfg80211_debug("cfg80211_unlink_bss called for BSSID %pM",
+			       scan_entry->bssid.bytes);
+		cfg80211_unlink_bss(wiphy, bss);
+		wlan_cfg80211_put_bss(wiphy, bss);
+	}
 }
