@@ -1254,7 +1254,6 @@ QDF_STATUS hdd_wlan_shutdown(void)
 	}
 
 	hdd_bus_bw_compute_timer_stop(hdd_ctx);
-	hdd_set_connection_in_progress(false);
 	policy_mgr_clear_concurrent_session_count(hdd_ctx->psoc);
 
 	hdd_debug("Invoking packetdump deregistration API");
@@ -2049,7 +2048,7 @@ static int __wlan_hdd_cfg80211_set_txpower(struct wiphy *wiphy,
 {
 	struct hdd_context *hdd_ctx = (struct hdd_context *) wiphy_priv(wiphy);
 	mac_handle_t mac_handle;
-	struct hdd_adapter *adapter;
+	struct hdd_adapter *adapter = WLAN_HDD_GET_PRIV_PTR(wdev->netdev);
 	struct qdf_mac_addr bssid = QDF_MAC_ADDR_BCAST_INIT;
 	struct qdf_mac_addr selfmac;
 	QDF_STATUS status;
@@ -2057,13 +2056,6 @@ static int __wlan_hdd_cfg80211_set_txpower(struct wiphy *wiphy,
 	int dbm;
 
 	hdd_enter();
-
-	if (!wdev) {
-		hdd_err("wdev is null, set tx power failed");
-		return -EIO;
-	}
-
-	adapter = WLAN_HDD_GET_PRIV_PTR(wdev->netdev);
 
 	if (QDF_GLOBAL_FTM_MODE == hdd_get_conparam()) {
 		hdd_err("Command not allowed in FTM mode");

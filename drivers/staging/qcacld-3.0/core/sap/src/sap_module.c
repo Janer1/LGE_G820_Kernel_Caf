@@ -1257,7 +1257,6 @@ wlansap_update_csa_channel_params(struct sap_context *sap_context,
  *
  * Return: string reason
  */
-#ifdef WLAN_DEBUG
 static char *sap_get_csa_reason_str(enum sap_csa_reason_code reason)
 {
 	switch (reason) {
@@ -1283,7 +1282,6 @@ static char *sap_get_csa_reason_str(enum sap_csa_reason_code reason)
 		return "UNKNOWN";
 	}
 }
-#endif
 
 /**
  * wlansap_set_channel_change_with_csa() - Set channel change with CSA
@@ -2729,8 +2727,7 @@ QDF_STATUS wlansap_filter_ch_based_acs(struct sap_context *sap_ctx,
 	size_t ch_index;
 	size_t target_ch_cnt = 0;
 
-	if (!sap_ctx || !ch_list || !ch_cnt ||
-	    !sap_ctx->acs_cfg->master_ch_list) {
+	if (!sap_ctx || !ch_list || !ch_cnt || !sap_ctx->acs_cfg->ch_list) {
 		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_ERROR,
 			  FL("NULL parameters"));
 		return QDF_STATUS_E_FAULT;
@@ -2738,8 +2735,8 @@ QDF_STATUS wlansap_filter_ch_based_acs(struct sap_context *sap_ctx,
 
 	for (ch_index = 0; ch_index < *ch_cnt; ch_index++) {
 		if (wlansap_is_channel_present_in_acs_list(ch_list[ch_index],
-					sap_ctx->acs_cfg->master_ch_list,
-					sap_ctx->acs_cfg->master_ch_list_count))
+					     sap_ctx->acs_cfg->ch_list,
+					     sap_ctx->acs_cfg->ch_list_count))
 			ch_list[target_ch_cnt++] = ch_list[ch_index];
 	}
 
