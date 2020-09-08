@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -62,6 +62,13 @@
 #include "wlan_ipa_ucfg_api.h"
 #include "wlan_hdd_scan.h"
 #include "wlan_hdd_bcn_recv.h"
+#include "wlan_mlme_main.h"
+#include "wlan_hdd_nud_tracking.h"
+#include "wlan_mlme_ucfg_api.h"
+#include "wlan_hdd_ftm_time_sync.h"
+#include "wlan_pkt_capture_ucfg_api.h"
+#include "wlan_hdd_periodic_sta_stats.h"
+#include "wlan_hdd_main.h"
 
 #include "wlan_hdd_nud_tracking.h"
 /* These are needed to recognize WPA and RSN suite types */
@@ -1812,6 +1819,7 @@ static QDF_STATUS hdd_dis_connect_handler(struct hdd_adapter *adapter,
 
 	hdd_wmm_adapter_clear(adapter);
 	mac_handle = hdd_ctx->mac_handle;
+	
 	sme_ft_reset(mac_handle, adapter->session_id);
 	sme_reset_key(mac_handle, adapter->session_id);
 	if (!hdd_remove_beacon_filter(adapter)) {

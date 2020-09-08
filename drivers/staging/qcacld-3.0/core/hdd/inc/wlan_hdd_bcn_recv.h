@@ -52,6 +52,7 @@ int wlan_hdd_cfg80211_bcn_rcv_op(struct wiphy *wiphy,
  *
  * Return: None
  */
+ 
 void hdd_beacon_recv_pause_indication(hdd_handle_t hdd_handle,
 				      uint8_t vdev_id,
 				      enum scan_event_type type,
@@ -84,4 +85,3 @@ void hdd_beacon_recv_pause_indication(hdd_handle_t hdd_handle,
 {
 }
 #endif
-

@@ -273,6 +273,8 @@ typedef enum {
 	WLAN_WIFI_POS_TGT_IF_ID = 41,
 	WLAN_MLME_OBJ_DEL_ID    = 42,
 	WLAN_ACTION_OUI_ID      = 43,
+	FTM_TIME_SYNC_ID        = 44,
+	WLAN_PKT_CAPTURE_ID   = 45,
 	WLAN_REF_ID_MAX,
 } wlan_objmgr_ref_dbgid;
 

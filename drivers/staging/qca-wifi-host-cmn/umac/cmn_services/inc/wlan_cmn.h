@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018, 2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -250,6 +250,8 @@
  * @WLAN_UMAC_COMP_IPA:           IPA
  * @WLAN_UMAC_COMP_CP_STATS:      Control Plane Statistics
  * @WLAN_UMAC_COMP_ACTION_OUI:    ACTION OUI
+ * @WLAN_UMAC_COMP_FTM_TIME_SYNC: WLAN FTM TIMESYNC
+ * @WLAN_UMAC_COMP_PKT_CAPTURE:   Packet capture component
  * @WLAN_UMAC_COMP_ID_MAX:        Maximum components in UMAC
  *
  * This id is static.
@@ -285,6 +287,8 @@ enum wlan_umac_comp_id {
 	WLAN_UMAC_COMP_IPA                = 26,
 	WLAN_UMAC_COMP_CP_STATS           = 27,
 	WLAN_UMAC_COMP_ACTION_OUI         = 28,
+	WLAN_UMAC_COMP_FTM_TIME_SYNC      = 29,
+	WLAN_UMAC_COMP_PKT_CAPTURE        = 30,
 	WLAN_UMAC_COMP_ID_MAX,
 };
 
@@ -301,37 +305,37 @@ typedef enum {
 } WLAN_DEV_TYPE;
 
 /**
- *  enum wlan_phymode - phy mode
- *  @WLAN_PHYMODE_AUTO:           autoselect
- *  @WLAN_PHYMODE_11A:            5GHz, OFDM
- *  @WLAN_PHYMODE_11B:            2GHz, CCK
- *  @WLAN_PHYMODE_11G:            2GHz, OFDM
- *  @WLAN_PHYMODE_11NA_HT20:      5Ghz, HT20
- *  @WLAN_PHYMODE_11NG_HT20:      2Ghz, HT20
- *  @WLAN_PHYMODE_11NA_HT40PLUS:  5Ghz, HT40 (ext ch +1)
- *  @WLAN_PHYMODE_11NA_HT40MINUS: 5Ghz, HT40 (ext ch -1)
- *  @WLAN_PHYMODE_11NG_HT40PLUS:  2Ghz, HT40 (ext ch +1)
- *  @WLAN_PHYMODE_11NG_HT40MINUS: 2Ghz, HT40 (ext ch -1)
- *  @WLAN_PHYMODE_11NG_HT40:      2Ghz, Auto HT40
- *  @WLAN_PHYMODE_11NA_HT40:      5Ghz, Auto HT40
- *  @WLAN_PHYMODE_11AC_VHT20:     5Ghz, VHT20
- *  @WLAN_PHYMODE_11AC_VHT40PLUS: 5Ghz, VHT40 (Ext ch +1)
- *  @WLAN_PHYMODE_11AC_VHT40MINUS:5Ghz  VHT40 (Ext ch -1)
- *  @WLAN_PHYMODE_11AC_VHT40:     5Ghz, VHT40
- *  @WLAN_PHYMODE_11AC_VHT80:     5Ghz, VHT80
- *  @WLAN_PHYMODE_11AC_VHT160:    5Ghz, VHT160
- *  @WLAN_PHYMODE_11AC_VHT80_80:  5Ghz, VHT80_80
- *  @WLAN_PHYMODE_11AXA_HE20:     5GHz, HE20
- *  @WLAN_PHYMODE_11AXG_HE20:     2GHz, HE20
- *  @WLAN_PHYMODE_11AXA_HE40PLUS: 5GHz, HE40 (ext ch +1)
- *  @WLAN_PHYMODE_11AXA_HE40MINUS:5GHz, HE40 (ext ch -1)
- *  @WLAN_PHYMODE_11AXG_HE40PLUS: 2GHz, HE40 (ext ch +1)
- *  @WLAN_PHYMODE_11AXG_HE40MINUS:2GHz, HE40 (ext ch -1)
- *  @WLAN_PHYMODE_11AXA_HE40:     5GHz, HE40
- *  @WLAN_PHYMODE_11AXG_HE40:     2GHz, HE40
- *  @WLAN_PHYMODE_11AXA_HE80:     5GHz, HE80
- *  @WLAN_PHYMODE_11AXA_HE160:    5GHz, HE160
- *  @WLAN_PHYMODE_11AXA_HE80_80:  5GHz, HE80_80
+ * enum wlan_phymode - phy mode
+ * @WLAN_PHYMODE_AUTO:           autoselect
+ * @WLAN_PHYMODE_11A:            5GHz, OFDM
+ * @WLAN_PHYMODE_11B:            2GHz, CCK
+ * @WLAN_PHYMODE_11G:            2GHz, OFDM
+ * @WLAN_PHYMODE_11NA_HT20:      5Ghz, HT20
+ * @WLAN_PHYMODE_11NG_HT20:      2Ghz, HT20
+ * @WLAN_PHYMODE_11NA_HT40PLUS:  5Ghz, HT40 (ext ch +1)
+ * @WLAN_PHYMODE_11NA_HT40MINUS: 5Ghz, HT40 (ext ch -1)
+ * @WLAN_PHYMODE_11NG_HT40PLUS:  2Ghz, HT40 (ext ch +1)
+ * @WLAN_PHYMODE_11NG_HT40MINUS: 2Ghz, HT40 (ext ch -1)
+ * @WLAN_PHYMODE_11NG_HT40:      2Ghz, Auto HT40
+ * @WLAN_PHYMODE_11NA_HT40:      5Ghz, Auto HT40
+ * @WLAN_PHYMODE_11AC_VHT20:     5Ghz, VHT20
+ * @WLAN_PHYMODE_11AC_VHT40PLUS: 5Ghz, VHT40 (Ext ch +1)
+ * @WLAN_PHYMODE_11AC_VHT40MINUS:5Ghz  VHT40 (Ext ch -1)
+ * @WLAN_PHYMODE_11AC_VHT40:     5Ghz, VHT40
+ * @WLAN_PHYMODE_11AC_VHT80:     5Ghz, VHT80
+ * @WLAN_PHYMODE_11AC_VHT160:    5Ghz, VHT160
+ * @WLAN_PHYMODE_11AC_VHT80_80:  5Ghz, VHT80_80
+ * @WLAN_PHYMODE_11AXA_HE20:     5GHz, HE20
+ * @WLAN_PHYMODE_11AXG_HE20:     2GHz, HE20
+ * @WLAN_PHYMODE_11AXA_HE40PLUS: 5GHz, HE40 (ext ch +1)
+ * @WLAN_PHYMODE_11AXA_HE40MINUS:5GHz, HE40 (ext ch -1)
+ * @WLAN_PHYMODE_11AXG_HE40PLUS: 2GHz, HE40 (ext ch +1)
+ * @WLAN_PHYMODE_11AXG_HE40MINUS:2GHz, HE40 (ext ch -1)
+ * @WLAN_PHYMODE_11AXA_HE40:     5GHz, HE40
+ * @WLAN_PHYMODE_11AXG_HE40:     2GHz, HE40
+ * @WLAN_PHYMODE_11AXA_HE80:     5GHz, HE80
+ * @WLAN_PHYMODE_11AXA_HE160:    5GHz, HE160
+ * @WLAN_PHYMODE_11AXA_HE80_80:  5GHz, HE80_80
  */
 enum wlan_phymode {
 	WLAN_PHYMODE_AUTO             = 0,
