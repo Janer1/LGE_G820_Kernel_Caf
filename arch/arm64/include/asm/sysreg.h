@@ -60,7 +60,9 @@
 #ifndef CONFIG_BROKEN_GAS_INST
 
 #ifdef __ASSEMBLY__
-#define __emit_inst(x)			.inst (x)
+// The space separator is omitted so that __emit_inst(x) can be parsed as
+// either an assembler directive or an assembler macro argument.
+#define __emit_inst(x)			.inst(x)
 #else
 #define __emit_inst(x)			".inst " __stringify((x)) "\n\t"
 #endif
@@ -324,7 +326,7 @@
 #define SCTLR_EL2_RES0	((1 << 6)  | (1 << 7)  | (1 << 8)  | (1 << 9)  | \
 			 (1 << 10) | (1 << 13) | (1 << 14) | (1 << 15) | \
 			 (1 << 17) | (1 << 20) | (1 << 21) | (1 << 24) | \
-			 (1 << 26) | (1 << 27) | (1 << 30) | (1 << 31)) | \
+			 (1 << 26) | (1 << 27) | (1 << 30) | (1 << 31) | \
 			 (0xffffefffUL << 32))
 
 #ifdef CONFIG_CPU_BIG_ENDIAN
@@ -345,7 +347,6 @@
 #error "Inconsistent SCTLR_EL2 set/clear bits"
 #endif
 
-
 /* SCTLR_EL1 specific flags. */
 #define SCTLR_EL1_UCI		(1 << 26)
 #define SCTLR_EL1_E0E		(1 << 24)
@@ -363,7 +364,7 @@
 #define SCTLR_EL1_RES1	((1 << 11) | (1 << 20) | (1 << 22) | (1 << 28) | \
 			 (1 << 29))
 #define SCTLR_EL1_RES0  ((1 << 6)  | (1 << 10) | (1 << 13) | (1 << 17) | \
-			 (1 << 21) | (1 << 27) | (1 << 30) | (1 << 31)) | \
+			 (1 << 21) | (1 << 27) | (1 << 30) | (1 << 31) | \
 			 (0xffffefffUL << 32))
 
 #ifdef CONFIG_CPU_BIG_ENDIAN
@@ -410,8 +411,8 @@
 /* id_aa64pfr0 */
 #define ID_AA64PFR0_CSV3_SHIFT		60
 #define ID_AA64PFR0_CSV2_SHIFT		56
-#define ID_AA64PFR0_DIT_SHIFT		48
 #define ID_AA64PFR0_SVE_SHIFT		32
+#define ID_AA64PFR0_DIT_SHIFT		48
 #define ID_AA64PFR0_GIC_SHIFT		24
 #define ID_AA64PFR0_ASIMD_SHIFT		20
 #define ID_AA64PFR0_FP_SHIFT		16
@@ -640,17 +641,16 @@
  * Modify bits in a sysreg. Bits in the clear mask are zeroed, then bits in the
  * set mask are set. Other bits are left as-is.
  */
-#define sysreg_clear_set(sysreg, clear, set) do {                      \
-       u64 __scs_val = read_sysreg(sysreg);                            \
-       u64 __scs_new = (__scs_val & ~(u64)(clear)) | (set);            \
-       if (__scs_new != __scs_val)                                     \
-               write_sysreg(__scs_new, sysreg);                        \
+#define sysreg_clear_set(sysreg, clear, set) do {			\
+	u64 __scs_val = read_sysreg(sysreg);				\
+	u64 __scs_new = (__scs_val & ~(u64)(clear)) | (set);		\
+	if (__scs_new != __scs_val)					\
+		write_sysreg(__scs_new, sysreg);			\
 } while (0)
 
 static inline void config_sctlr_el1(u32 clear, u32 set)
 {
 	u32 val;
-
 
 	val = read_sysreg(sctlr_el1);
 	val &= ~clear;
