@@ -534,7 +534,7 @@ enum hdd_dot11_mode {
  * gNeighborScanChannelMaxTime - Set neighbor scan channel max time
  * @Min: 3
  * @Max: 300
- * @Default: 30
+ * @Default: 40
  *
  * This ini is used to set the maximum time in secs spent on each
  * channel in LFR scan inside firmware.
@@ -550,7 +550,7 @@ enum hdd_dot11_mode {
 #define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_NAME                  "gNeighborScanChannelMaxTime"
 #define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_MIN                   (3)
 #define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_MAX                   (300)
-#define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_DEFAULT               (30)
+#define CFG_NEIGHBOR_SCAN_MAX_CHAN_TIME_DEFAULT               (40)
 
 /*
  * <ini>
@@ -1882,11 +1882,15 @@ enum hdd_dot11_mode {
  * <ini>
  * gForce1x1Exception - force 1x1 when connecting to certain peer
  * @Min: 0
- * @Max: 1
- * @Default: 0
+ * @Max: 2
+ * @Default: 2
  *
  * This INI when enabled will force 1x1 connection with certain peer.
- *
+ * The implementation for this ini would be as follows:-
+ * Value 0: Even if the AP is present in OUI, 1x1 will not be forced
+ * Value 1: If antenna sharing supported, then only do 1x1.
+ * Value 2: If AP present in OUI, force 1x1 connection.
+
  *
  * Related: None
  *
@@ -1898,7 +1902,7 @@ enum hdd_dot11_mode {
  */
 #define CFG_FORCE_1X1_NAME      "gForce1x1Exception"
 #define CFG_FORCE_1X1_MIN       (0)
-#define CFG_FORCE_1X1_MAX       (1)
+#define CFG_FORCE_1X1_MAX       (2)
 #define CFG_FORCE_1X1_DEFAULT   (1)
 
 /*
@@ -10010,14 +10014,18 @@ enum dot11p_mode {
  * g_sta_sap_scc_on_dfs_chan - Allow STA+SAP SCC on DFS channel with master
  * mode support disabled.
  * @Min: 0
- * @Max: 1
+ * @Max: 2
  * @Default: 0
  *
  * This ini is used to allow STA+SAP SCC on DFS channel with master mode
- * support disabled.
+ * support disabled, the value is defined by enum PM_AP_DFS_MASTER_MODE.
  * 0 - Disallow STA+SAP SCC on DFS channel
  * 1 - Allow STA+SAP SCC on DFS channel with master mode disabled
- *
+ * 2 - enhance "1" with below requirement
+ *	 a. Allow single SAP (GO) start on DFS channel.
+ *	 b. Allow CAC process on DFS channel in single SAP (GO) mode
+ *	 c. Allow DFS radar event process in single SAP (GO) mode
+ *	 d. Disallow CAC and radar event process in SAP (GO) + STA mode.
  * Related: None.
  *
  * Supported Feature: Non-DBS, DBS
@@ -10118,6 +10126,31 @@ enum dot11p_mode {
 #define CFG_SET_TSF_PTP_OPT_TSF64_TX            (0x10)
 #define CFG_SET_TSF_PTP_OPT_DEFAULT               (0xf)
 #endif
+
+/*
+ * <ini>
+ * gThreeWayCoexConfigLegacyEnable - Enable coex config legacy feature
+ * @Min: 0
+ * @Max: 1
+ * @Default: 0
+ *
+ * This ini is used to enable or disable three way coex config legacy feature.
+ * This feature is designed only for non-mobile solution.
+ * When the feature is disabled, Firmware use the default configuration to
+ * set the coex priority of three antenna(WLAN, BT, ZIGBEE).
+ * when enable this feature, customer can use the vendor command to set antenna
+ * coex priority dynamically.
+ *
+ * Supported Feature: three way coex config
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ENABLE_TW_COEX_LEGACY_NAME  "gThreeWayCoexConfigLegacyEnable"
+#define CFG_ENABLE_TW_COEX_LEGACY_MIN     (0)
+#define CFG_ENABLE_TW_COEX_LEGACY_MAX     (1)
+#define CFG_ENABLE_TW_COEX_LEGACY_DEFAULT (0)
 
 /*
  * Dense traffic threshold
@@ -10710,7 +10743,7 @@ enum dot11p_mode {
 #define CFG_BUG_ON_REINIT_FAILURE_NAME     "g_bug_on_reinit_failure"
 #define CFG_BUG_ON_REINIT_FAILURE_MIN      (0)
 #define CFG_BUG_ON_REINIT_FAILURE_MAX      (1)
-#define CFG_BUG_ON_REINIT_FAILURE_DEFAULT  (1)
+#define CFG_BUG_ON_REINIT_FAILURE_DEFAULT  (0)
 
 /*
  * <ini>
@@ -11503,8 +11536,8 @@ enum hdd_wext_control {
  * <ini>
  * gAutoBmpsTimerValue - Set Auto BMPS Timer value
  * @Min: 0
- * @Max: 120
- * @Default: 90
+ * @Max: 1000
+ * @Default: 600
  *
  * This ini is used to set Auto BMPS Timer value in seconds
  *
@@ -11518,8 +11551,8 @@ enum hdd_wext_control {
  */
 #define CFG_AUTO_PS_ENABLE_TIMER_NAME          "gAutoBmpsTimerValue"
 #define CFG_AUTO_PS_ENABLE_TIMER_MIN           (0)
-#define CFG_AUTO_PS_ENABLE_TIMER_MAX           (120)
-#define CFG_AUTO_PS_ENABLE_TIMER_DEFAULT       (90)
+#define CFG_AUTO_PS_ENABLE_TIMER_MAX           (1000)
+#define CFG_AUTO_PS_ENABLE_TIMER_DEFAULT       (600)
 
 #ifdef WLAN_ICMP_DISABLE_PS
 /*
@@ -15401,7 +15434,7 @@ enum hdd_external_acs_policy {
  * </ini>
  */
 #define CFG_ACTION_OUI_SWITCH_TO_11N_MODE_NAME    "gActionOUISwitchTo11nMode"
-#define CFG_ACTION_OUI_SWITCH_TO_11N_MODE_DEFAULT "00904C 03 0418BF E0 21 40"
+#define CFG_ACTION_OUI_SWITCH_TO_11N_MODE_DEFAULT "00904C 05 0418BF0CB2 F8 21 40"
 
 /*
  * <ini>
@@ -15490,6 +15523,36 @@ enum hdd_external_acs_policy {
  */
 #define CFG_ACTION_OUI_DISABLE_AGGRESSIVE_TX_NAME "gActionOUIDisableAggressiveTX"
 #define CFG_ACTION_OUI_DISABLE_AGGRESSIVE_TX_DEFAULT "FFFFFF 00 2A F85971000000 E0 50 FFFFFF 00 2A 14ABC5000000 E0 50"
+
+/*
+ * <ini>
+ * gActionOUIDisableAggressiveEDCA - Used to specify action OUIs to control
+ * EDCA configuration when join the candidate AP
+ *
+ * @Default: NULL
+ * Note: User should strictly add new action OUIs at the end of this
+ * default value.
+ *
+ * This ini is used to specify AP OUIs. The station's EDCA should follow the
+ * APs' when connecting to those AP, even if the gEnableEdcaParams is set.
+ * For example, it follows the AP's EDCA whose OUI is 0050F2 with the
+ * following setting:
+ *     gActionOUIDisableAggressiveEDCA=0050F2 00 01
+ *          Explain: 0050F2: OUI
+ *                   00: data length is 0
+ *                   01: info mask, only OUI present in Info mask
+ * Refer to gEnableActionOUI for more detail about the format.
+ *
+ * Related: gEnableEdcaParams, gEnableActionOUI
+ *
+ * Supported Feature: Action OUIs
+ *
+ * Usage: External
+ *
+ * </ini>
+ */
+#define CFG_ACTION_OUI_DISABLE_AGGRESSIVE_EDCA "gActionOUIDisableAggressiveEDCA"
+#define CFG_ACTION_OUI_DISABLE_AGGRESSIVE_EDCA_DEFAULT ""
 
 /* End of action oui inis */
 
@@ -17066,7 +17129,6 @@ struct hdd_config {
 	/* threshold of packet drops at which FW initiates disconnect */
 	uint16_t pkt_err_disconn_th;
 	enum force_1x1_type is_force_1x1_enable;
-	bool is_force_1x1;
 	uint8_t enable_rts_sifsbursting;
 	uint8_t max_mpdus_inampdu;
 	uint16_t sap_max_mcs_txdata;
