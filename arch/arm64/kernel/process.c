@@ -184,6 +184,13 @@ void machine_restart(char *cmd)
 	while (1);
 }
 
+#ifdef CONFIG_LGE_POWEROFF_TIMEOUT
+void machine_restart_timeout(char *cmd)
+{
+       if (arm_pm_restart_timeout)
+	      arm_pm_restart_timeout(reboot_mode, cmd);
+}
+#endif
 void __show_regs(struct pt_regs *regs)
 {
 	int i, top_reg;
