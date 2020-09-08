@@ -139,7 +139,7 @@ static void hdd_send_bcn_recv_info(hdd_handle_t hdd_handle,
 
 	vendor_event =
 		cfg80211_vendor_event_alloc(
-			hdd_ctx->wiphy, NULL,
+			hdd_ctx->wiphy, &(adapter->wdev),
 			data_len,
 			QCA_NL80211_VENDOR_SUBCMD_BEACON_REPORTING_INDEX,
 			flags);
@@ -443,7 +443,7 @@ void hdd_beacon_recv_pause_indication(hdd_handle_t hdd_handle,
 
 	vendor_event =
 		cfg80211_vendor_event_alloc(
-			hdd_ctx->wiphy, NULL,
+			hdd_ctx->wiphy, &(adapter->wdev),
 			data_len,
 			QCA_NL80211_VENDOR_SUBCMD_BEACON_REPORTING_INDEX,
 			flags);
