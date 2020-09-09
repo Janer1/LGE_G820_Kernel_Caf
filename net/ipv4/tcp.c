@@ -337,7 +337,7 @@ void tcp_enter_memory_pressure(struct sock *sk)
 {
 	unsigned long val;
 
-	if (tcp_memory_pressure)
+	if (READ_ONCE(tcp_memory_pressure))
 		return;
 	val = jiffies;
 
@@ -352,7 +352,7 @@ void tcp_leave_memory_pressure(struct sock *sk)
 {
 	unsigned long val;
 
-	if (!tcp_memory_pressure)
+	if (!READ_ONCE(tcp_memory_pressure))
 		return;
 	val = xchg(&tcp_memory_pressure, 0);
 	if (val)
@@ -2141,13 +2141,15 @@ skip_copy:
 			tp->urg_data = 0;
 			tcp_fast_path_check(sk);
 		}
-		if (used + offset < skb->len)
-			continue;
 
 		if (TCP_SKB_CB(skb)->has_rxtstamp) {
 			tcp_update_recv_tstamps(skb, &tss);
 			has_tss = true;
 		}
+
+		if (used + offset < skb->len)
+			continue;
+
 		if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
 			goto found_fin_ok;
 		if (!(flags & MSG_PEEK))
@@ -2317,7 +2319,13 @@ void tcp_close(struct sock *sk, long timeout)
 
 #ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
 	if (is_meta_sk(sk)) {
-		mptcp_close(sk, timeout);
+		/* TODO: Currently forcing timeout to 0 because
+		 * sk_stream_wait_close will complain during lockdep because
+		 * of the mpcb_mutex (circular lock dependency through
+		 * inet_csk_listen_stop()).
+		 * We should find a way to get rid of the mpcb_mutex.
+		 */
+		mptcp_close(sk, 0);
 		return;
 	}
 #endif
@@ -2576,9 +2584,14 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->snd_ssthresh = TCP_INFINITE_SSTHRESH;
 	tp->snd_cwnd_cnt = 0;
 	tp->window_clamp = 0;
+	tp->delivered = 0;
+	if (icsk->icsk_ca_ops->release)
+		icsk->icsk_ca_ops->release(sk);
+	memset(icsk->icsk_ca_priv, 0, sizeof(icsk->icsk_ca_priv));
 	tcp_set_ca_state(sk, TCP_CA_Open);
 	tp->is_sack_reneg = 0;
 	tcp_clear_retrans(tp);
+	tp->total_retrans = 0;
 	inet_csk_delack_init(sk);
 	/* Initialize rcv_mss to TCP_MIN_MSS to avoid division by 0
 	 * issue in __tcp_select_window()
@@ -2590,8 +2603,12 @@ int tcp_disconnect(struct sock *sk, int flags)
 	dst_release(sk->sk_rx_dst);
 	sk->sk_rx_dst = NULL;
 	tcp_saved_syn_free(tp);
+	tp->segs_in = 0;
+	tp->segs_out = 0;
 	tp->bytes_acked = 0;
 	tp->bytes_received = 0;
+	tp->data_segs_in = 0;
+	tp->data_segs_out = 0;
 
 	/* Clean up fastopen related fields */
 	tcp_free_fastopen_req(tp);
@@ -2613,7 +2630,11 @@ EXPORT_SYMBOL(tcp_disconnect);
 static inline bool tcp_can_repair_sock(const struct sock *sk)
 {
 	return ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN) &&
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+		(sk->sk_state != TCP_LISTEN) && !sock_flag(sk, SOCK_MPTCP);
+#else
 		(sk->sk_state != TCP_LISTEN);
+#endif
 }
 
 static int tcp_repair_set_window(struct tcp_sock *tp, char __user *optbuf, int len)
@@ -3033,10 +3054,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 #ifdef CONFIG_TCP_MD5SIG
 	case TCP_MD5SIG:
 	case TCP_MD5SIG_EXT:
-		if ((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN))
-			err = tp->af_specific->md5_parse(sk, optname, optval, optlen);
-		else
-			err = -EINVAL;
+		err = tp->af_specific->md5_parse(sk, optname, optval, optlen);
 		break;
 #endif
 	case TCP_USER_TIMEOUT:
@@ -3088,7 +3106,11 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 #ifdef CONFIG_MPTCP
 	case MPTCP_ENABLED:
 		if (mptcp_init_failed || !sysctl_mptcp_enabled ||
-		    sk->sk_state != TCP_CLOSE) {
+		    sk->sk_state != TCP_CLOSE
+#ifdef CONFIG_TCP_MD5SIG
+		    || tp->md5sig_info
+#endif
+								) {
 			err = -EPERM;
 			break;
 		}
@@ -3161,7 +3183,11 @@ static void tcp_get_info_chrono_stats(const struct tcp_sock *tp,
 }
 
 /* Return information about state of tcp endpoint in API format. */
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+void tcp_get_info(struct sock *sk, struct tcp_info *info, bool no_lock)
+#else
 void tcp_get_info(struct sock *sk, struct tcp_info *info)
+#endif
 {
 	const struct tcp_sock *tp = tcp_sk(sk); /* iff sk_type == SOCK_STREAM */
 	const struct inet_connection_sock *icsk = inet_csk(sk);
@@ -3198,7 +3224,10 @@ void tcp_get_info(struct sock *sk, struct tcp_info *info)
 		return;
 	}
 
-	slow = lock_sock_fast(sk);
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+	if (!no_lock)
+#endif
+		slow = lock_sock_fast(sk);
 
 	info->tcpi_ca_state = icsk->icsk_ca_state;
 	info->tcpi_retransmits = icsk->icsk_retransmits;
@@ -3267,7 +3296,11 @@ void tcp_get_info(struct sock *sk, struct tcp_info *info)
 	rate64 = tcp_compute_delivery_rate(tp);
 	if (rate64)
 		info->tcpi_delivery_rate = rate64;
-	unlock_sock_fast(sk, slow);
+
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+	if (!no_lock)
+#endif
+		unlock_sock_fast(sk, slow);
 }
 EXPORT_SYMBOL_GPL(tcp_get_info);
 
@@ -3373,7 +3406,11 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 		if (get_user(len, optlen))
 			return -EFAULT;
 
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+		tcp_get_info(sk, &info, false);
+#else
 		tcp_get_info(sk, &info);
+#endif
 
 		len = min_t(unsigned int, len, sizeof(info));
 		if (put_user(len, optlen))
@@ -3544,16 +3581,22 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 		if (put_user(len, optlen))
 			return -EFAULT;
 
+		lock_sock(sk);
 		if (mptcp(tcp_sk(sk))) {
 			struct mptcp_cb *mpcb = tcp_sk(mptcp_meta_sk(sk))->mpcb;
 
-			if (copy_to_user(optval, mpcb->sched_ops->name, len))
+			if (copy_to_user(optval, mpcb->sched_ops->name, len)) {
+				release_sock(sk);
 				return -EFAULT;
+			}
 		} else {
 			if (copy_to_user(optval, tcp_sk(sk)->mptcp_sched_name,
-					 len))
+					 len)) {
+				release_sock(sk);
 				return -EFAULT;
+			}
 		}
+		release_sock(sk);
 		return 0;
 
 	case MPTCP_PATH_MANAGER:
@@ -3563,16 +3606,22 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 		if (put_user(len, optlen))
 			return -EFAULT;
 
+		lock_sock(sk);
 		if (mptcp(tcp_sk(sk))) {
 			struct mptcp_cb *mpcb = tcp_sk(mptcp_meta_sk(sk))->mpcb;
 
-			if (copy_to_user(optval, mpcb->pm_ops->name, len))
+			if (copy_to_user(optval, mpcb->pm_ops->name, len)) {
+				release_sock(sk);
 				return -EFAULT;
+			}
 		} else {
 			if (copy_to_user(optval, tcp_sk(sk)->mptcp_pm_name,
-					 len))
+					 len)) {
+				release_sock(sk);
 				return -EFAULT;
+			}
 		}
+		release_sock(sk);
 		return 0;
 
 	case MPTCP_ENABLED:
@@ -3763,10 +3812,13 @@ EXPORT_SYMBOL(tcp_md5_hash_skb_data);
 
 int tcp_md5_hash_key(struct tcp_md5sig_pool *hp, const struct tcp_md5sig_key *key)
 {
+	u8 keylen = READ_ONCE(key->keylen); /* paired with WRITE_ONCE() in tcp_md5_do_add */
 	struct scatterlist sg;
 
-	sg_init_one(&sg, key->key, key->keylen);
-	ahash_request_set_crypt(hp->md5_req, &sg, NULL, key->keylen);
+	sg_init_one(&sg, key->key, keylen);
+	ahash_request_set_crypt(hp->md5_req, &sg, NULL, keylen);
+
+	/* tcp_md5_do_add() might change key->key under us */
 	return crypto_ahash_update(hp->md5_req);
 }
 EXPORT_SYMBOL(tcp_md5_hash_key);

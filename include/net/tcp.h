@@ -55,7 +55,7 @@ extern struct inet_hashinfo tcp_hashinfo;
 extern struct percpu_counter tcp_orphan_count;
 void tcp_time_wait(struct sock *sk, int state, int timeo);
 
-#define MAX_TCP_HEADER	(128 + MAX_HEADER)
+#define MAX_TCP_HEADER	L1_CACHE_ALIGN(128 + MAX_HEADER)
 #define MAX_TCP_OPTION_SPACE 40
 #define TCP_MIN_SND_MSS		48
 #define TCP_MIN_GSO_SIZE	(TCP_MIN_SND_MSS - MAX_TCP_OPTION_SPACE)
@@ -327,7 +327,7 @@ static inline bool tcp_under_memory_pressure(const struct sock *sk)
 	    mem_cgroup_under_socket_pressure(sk->sk_memcg))
 		return true;
 
-	return tcp_memory_pressure;
+	return READ_ONCE(tcp_memory_pressure);
 }
 /*
  * The next routines deal with comparing 32 bit unsigned ints
@@ -789,7 +789,11 @@ static inline int tcp_bound_to_half_wnd(struct tcp_sock *tp, int pktsize)
 }
 
 /* tcp.c */
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+void tcp_get_info(struct sock *, struct tcp_info *, bool no_lock);
+#else
 void tcp_get_info(struct sock *, struct tcp_info *);
+#endif
 
 /* Read 'sendfile()'-style from a TCP socket */
 int tcp_read_sock(struct sock *sk, read_descriptor_t *desc,
@@ -1828,6 +1832,9 @@ static inline void tcp_init_send_head(struct sock *sk)
 }
 
 /* write queue abstraction */
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+void tcp_write_queue_purge(struct sock *sk);
+#else
 static inline void tcp_write_queue_purge(struct sock *sk)
 {
 	struct sk_buff *skb;
@@ -1841,6 +1848,7 @@ static inline void tcp_write_queue_purge(struct sock *sk)
 	tcp_sk(sk)->packets_out = 0;
 	inet_csk(sk)->icsk_backoff = 0;
 }
+#endif
 
 static inline struct sk_buff *tcp_write_queue_head(const struct sock *sk)
 {
