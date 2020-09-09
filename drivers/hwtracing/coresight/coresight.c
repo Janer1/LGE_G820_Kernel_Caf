@@ -478,7 +478,7 @@ int coresight_enable_path(struct list_head *path, u32 mode)
 		case CORESIGHT_DEV_TYPE_LINK:
 			parent = list_prev_entry(nd, link)->csdev;
 			child = list_next_entry(nd, link)->csdev;
-			ret = coresight_enable_link(csdev, parent, child);
+			ret = coresight_enable_link(csdev, parent, child, path);
 			if (ret)
 				goto err;
 			break;
@@ -490,7 +490,7 @@ int coresight_enable_path(struct list_head *path, u32 mode)
 out:
 	return ret;
 err:
-	coresight_disable_path(path);
+	coresight_disable_previous_devs(path, nd);
 	goto out;
 }
 
@@ -686,19 +686,11 @@ struct list_head *coresight_build_path(struct coresight_device *source,
  * Go through all the elements of a path and 1) removed it from the list and
  * 2) free the memory allocated for each node.
  */
-void coresight_release_path(struct coresight_device *csdev,
-			    struct list_head *path)
+void coresight_release_path(struct list_head *path)
 {
+	struct coresight_device *csdev;
 	struct coresight_node *nd, *next;
 
-	if (csdev != NULL && csdev->node != NULL) {
-		/* Remove path entry from source device */
-		list_del(&csdev->node->link);
-		kfree(csdev->node);
-		csdev->node = NULL;
-	}
-
-	/* Free the path */
 	list_for_each_entry_safe(nd, next, path, link) {
 		csdev = nd->csdev;
 
@@ -818,7 +810,7 @@ err_source:
 	coresight_disable_path(path);
 
 err_path:
-	coresight_release_path(csdev, path);
+	coresight_release_path(path);
 	goto out;
 }
 EXPORT_SYMBOL(coresight_enable);
@@ -838,7 +830,7 @@ static void __coresight_disable(struct coresight_device *csdev)
 		return;
 
 	coresight_disable_path(csdev->node->path);
-	coresight_release_path(csdev, csdev->node->path);
+	coresight_release_path(csdev->node->path);
 }
 
 void coresight_disable(struct coresight_device *csdev)
