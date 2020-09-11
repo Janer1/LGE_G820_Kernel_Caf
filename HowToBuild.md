@@ -1,4 +1,4 @@
-# Prerparation
+# Preparation
 
 Install required packages
 ```sh
