@@ -6,3 +6,4 @@ packing/kernel
 packing/new-boot.img
 toolchain/
 build_fast.sh
+build_kr_fast.sh
