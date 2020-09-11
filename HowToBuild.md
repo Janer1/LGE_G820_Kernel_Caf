@@ -23,7 +23,7 @@ git clone https://github.com/anht3889/LGE_G820_Kernel_Caf.git
 ```
 
 # Build the kernel
-Building the kernel is really simple by excuted the scripts, thanks to KamioRinn from https://github.com/KamioRinn/Metaphysics_LGE_G820_Kernel
+Building the kernel is really simple by excuting the scripts, thanks to KamioRinn from https://github.com/KamioRinn/Metaphysics_LGE_G820_Kernel
 
 Build kernel for G8 Korean
 ```sh
