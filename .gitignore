@@ -4,7 +4,6 @@ packing/Image.gz-dtb
 packing/dtb
 packing/kernel
 packing/new-boot.img
-packing/Dragonfly-KR.zip
-packing/Dragonfly-US.zip
+packing/Dragonfly*.zip
 packing/Dragonfly/new-boot.img
 toolchain/
