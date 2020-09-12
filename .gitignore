@@ -4,6 +4,7 @@ packing/Image.gz-dtb
 packing/dtb
 packing/kernel
 packing/new-boot.img
+packing/Dragonfly-KR.zip
+packing/Dragonfly-US.zip
+packing/Dragonfly/new-boot.img
 toolchain/
-build_fast.sh
-build_kr_fast.sh

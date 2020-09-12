@@ -25,12 +25,9 @@ git clone https://github.com/anht3889/LGE_G820_Kernel_Caf.git
 # Build the kernel
 Building the kernel is really simple by excuting the scripts, thanks to KamioRinn from https://github.com/KamioRinn/Metaphysics_LGE_G820_Kernel
 
-Build kernel for G8 Korean
+Build kernel for both G8 Korean & US
 ```sh
-./build_kr.sh
+./build.sh
 ```
-Build kernel for G8 US
-```sh
-./build_us.sh
-```
-The final kernel image will be located at `packing/new-boot.img` 
+
+Two flashable kernel zip is located at `/packing/Dragonfly-KR.zip` and `/packing/Dragonfly-US.zip`

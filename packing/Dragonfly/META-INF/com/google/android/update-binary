@@ -1,0 +1,77 @@
+#!/sbin/sh
+# LazyFlasher installer backend (for helper functions only)
+# Heavily modified by Dees_Troy and osm0sis
+
+tmp=/dev/tmp/Dragonfly
+
+# detect when flashing in Magisk Manager
+ps | grep zygote | grep -v grep >/dev/null && BOOTMODE=true || BOOTMODE=false;
+$BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -v grep >/dev/null && BOOTMODE=true;
+
+if [ "$3" ]; then
+	zip=$3
+	console=/proc/$$/fd/$2
+fi
+
+print() {
+	if $BOOTMODE; then
+		echo "$1"
+	else
+		if [ "$1" ]; then
+			echo "ui_print $1" > "$console"
+		else
+			echo "ui_print  " > "$console"
+		fi
+	fi
+}
+
+extract() {
+	rm -rf "$2"
+	mkdir -p "$2"
+	unzip -o "$1" -d "$2" || abort "Failed to extract zip to $2!"
+}
+
+print "######################################"
+print "#          Dragonfly Kernel          #"
+print "#             by Anh Tran            #"
+print "#                 V1.0               #"
+print "######################################"
+print
+
+# changelog
+print "Important! "
+print "This kernel includes Magisk"
+print "LG G8 with Android Q"
+print "Be sure to turn off Secure start-up before flash this kerne"
+print "Original A/B kernel/dtbo will be backed up to /sdcard/old_boot_a/b.img"
+print
+print "########################################"
+print
+
+# unpack the installer
+[ "$zip" ] && {
+	extract "$zip" "$tmp"
+	print
+
+}
+
+cd "$tmp"
+
+print
+print "Backing up..."
+dd if=/dev/block/bootdevice/by-name/boot_a of=/sdcard/old_boot_a.img
+dd if=/dev/block/bootdevice/by-name/boot_b of=/sdcard/old_boot_b.img
+
+print
+print "Flashing kernel..."
+dd if=new-boot.img of=/dev/block/bootdevice/by-name/boot_a
+dd if=new-boot.img of=/dev/block/bootdevice/by-name/boot_b
+
+
+print
+print "Cleaning..."
+cd /
+rm -rf /dev/tmp/Dragonfly
+
+print
+print "Reboot and enjoy it~"
