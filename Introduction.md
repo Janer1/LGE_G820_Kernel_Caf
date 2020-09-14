@@ -4,8 +4,8 @@ First of all, I'd like to thank Metaphysics team for giving the first custom ker
 
 # Main Features
 - Based on LGE open source LMG820N_Android_Q_v20a: http://opensource.lge.com/osSch/list?types=NAME&search=g820n
-- Linux-Stable-Upstream included to latest 4.14.197
-- Regular CAF-Tag for SD855 merged LA.UM.8.1.r1-15600-sm8150.0
+- Linux-Stable-Upstream included to latest 4.14.198
+- Regular CAF-Tag for SD855 merged LA.UM.8.1.r1-15800-sm8150.0
 - Compiled by ProtonClang 12.0.0 with -O3 speed optimizations
 - No VLAs
 - Magisk included
