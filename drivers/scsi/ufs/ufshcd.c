@@ -48,6 +48,9 @@
 #include "unipro.h"
 #include "ufs-debugfs.h"
 #include "ufs-qcom.h"
+#include <linux/power_hal.h>
+
+struct Scsi_Host *ph_host;
 
 #ifdef CONFIG_MACH_LGE
 #include "ufsdbg-print.h"
@@ -2503,6 +2506,29 @@ static ssize_t ufshcd_clkgate_enable_store(struct device *dev,
 	hba->clk_gating.is_enabled = value;
 out:
 	return count;
+}
+
+void set_ufshcd_clkgate_enable_status(u32 value)
+{
+	unsigned long flags;
+	struct ufs_hba *hba = shost_priv(ph_host);
+
+	/* Kang from ufshcd_clkgate_enable_store() */
+
+	value = !!value;
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+	if (value == hba->clk_gating.is_enabled)
+		goto out;
+
+	if (value) {
+		hba->clk_gating.active_reqs--;
+	} else {
+		hba->clk_gating.active_reqs++;
+	}
+	hba->clk_gating.is_enabled = value;
+out:
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
 }
 
 static enum hrtimer_restart ufshcd_clkgate_hrtimer_handler(
