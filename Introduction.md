@@ -31,11 +31,11 @@ First of all, I'd like to thank Metaphysics team for giving the first custom ker
 
 # Contributors
 - Anh Tran
-- JeanC26
+- Jean Carlos Bencosme
 
 # Credits
 - Metaphysics kernel team: https://github.com/KamioRinn/Metaphysics_LGE_G820_Kernel
 - SGCMarkus for his guide of building kernel
-- JeanC26 for adding / picking kernel features
+- Jean Carlos Bencosme for adding / picking kernel features
 - LGE for the kernel open source
 - All other great kernel devs
