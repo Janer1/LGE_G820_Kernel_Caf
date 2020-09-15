@@ -19,7 +19,9 @@ First of all, I'd like to thank Metaphysics team for giving the first custom ker
 - Overclock to 765MHz
 
 # Network related features
-- Added Wireguard VPN Tunnel Support
+- Add Wireguard VPN Tunnel Support
+- Add new TCP controller BBR2
+- Add new TCP controller Agile-SD
 
 # Memory related features
 - Add zram zstd support
