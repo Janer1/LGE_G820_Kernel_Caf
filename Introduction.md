@@ -17,7 +17,6 @@ First of all, I'd like to thank Metaphysics team for giving the first custom ker
 - Cpu input boost
 
 # GPU related features
-- Overclock to 765MHz
 
 # Network related features
 - Add Wireguard VPN Tunnel Support
