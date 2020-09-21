@@ -32,11 +32,6 @@
 	gpu_opp_table: gpu-opp-table {
 		compatible = "operating-points-v2";
 		
-		opp-810000000 {
-			opp-hz = /bits/ 64 <810000000>;
-			opp-microvolt = <RPMH_REGULATOR_LEVEL_TURBO_L1>;
-		};
-		
 		opp-765000000 {
 			opp-hz = /bits/ 64 <765000000>;
 			opp-microvolt = <RPMH_REGULATOR_LEVEL_TURBO>;
@@ -97,7 +92,7 @@
 		qcom,gpu-quirk-secvid-set-once;
 		qcom,gpu-quirk-cx-gdsc;
 
-		qcom,idle-timeout = <64>; //msecs
+		qcom,idle-timeout = <80>; //msecs
 		qcom,no-nap;
 
 		qcom,highest-bank-bit = <15>;
@@ -417,4 +412,3 @@
 		};
 	};
 };
-
