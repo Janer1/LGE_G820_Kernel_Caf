@@ -1457,7 +1457,7 @@ static void sde_color_process_plane_setup(struct drm_plane *plane)
 					MEMCOLOR_FOLIAGE, memcol);
 	}
 
-	if (pstate->dirty & SDE_PLANE_DIRTY_VIG_GAMUT &&
+	if (pstate->dirty & SDE_PLANE_DIRTY_VIG_GAMUT && !psde->is_virtual &&
 			psde->pipe_hw->ops.setup_vig_gamut) {
 		vig_gamut = msm_property_get_blob(&psde->property_info,
 				&pstate->property_state,
@@ -1470,7 +1470,7 @@ static void sde_color_process_plane_setup(struct drm_plane *plane)
 		psde->pipe_hw->ops.setup_vig_gamut(psde->pipe_hw, &hw_cfg);
 	}
 
-	if (pstate->dirty & SDE_PLANE_DIRTY_VIG_IGC &&
+	if (pstate->dirty & SDE_PLANE_DIRTY_VIG_IGC && !psde->is_virtual &&
 			psde->pipe_hw->ops.setup_vig_igc) {
 		igc = msm_property_get_blob(&psde->property_info,
 				&pstate->property_state,
@@ -3348,7 +3348,13 @@ static void sde_plane_cleanup_fb(struct drm_plane *plane,
 
 	sde_plane_rot_cleanup_fb(plane, old_state);
 }
-
+#ifdef CONFIG_UCI
+static bool force_update = false;
+void uci_force_sde_update(void) {
+	force_update = true;
+}
+EXPORT_SYMBOL(uci_force_sde_update);
+#endif
 static void _sde_plane_sspp_atomic_check_mode_changed(struct sde_plane *psde,
 		struct drm_plane_state *state,
 		struct drm_plane_state *old_state)
@@ -3359,6 +3365,12 @@ static void _sde_plane_sspp_atomic_check_mode_changed(struct sde_plane *psde,
 	struct sde_plane_rot_state *old_rstate = &old_pstate->rot;
 	struct drm_framebuffer *fb, *old_fb;
 
+#ifdef CONFIG_UCI
+	if (force_update) {
+		force_update = false;
+		pstate->dirty = SDE_PLANE_DIRTY_ALL;
+	}
+#endif
 	/* no need to check it again */
 	if (pstate->dirty == SDE_PLANE_DIRTY_ALL)
 		return;
@@ -3889,6 +3901,7 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 	struct drm_crtc *crtc;
 	struct drm_framebuffer *fb;
 	struct sde_rect src, dst;
+	bool is_rt;
 	bool q16_data = true;
 	int idx;
 
@@ -3942,7 +3955,7 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 	if (psde->revalidate) {
 		SDE_DEBUG("plane:%d - reconfigure all the parameters\n",
 				plane->base.id);
-		pstate->dirty = SDE_PLANE_DIRTY_ALL;
+		pstate->dirty = SDE_PLANE_DIRTY_ALL | SDE_PLANE_DIRTY_CP;
 		psde->revalidate = false;
 	}
 
@@ -4032,12 +4045,17 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 
 	_sde_plane_set_scanout(plane, pstate, &psde->pipe_cfg, fb);
 
+	is_rt = sde_crtc_get_client_type(crtc) != NRT_CLIENT;
+	if (is_rt != psde->is_rt_pipe) {
+		psde->is_rt_pipe = is_rt;
+		pstate->dirty |= SDE_PLANE_DIRTY_QOS;
+	}
+
 	/* early out if nothing dirty */
 	if (!pstate->dirty)
 		return 0;
 	pstate->pending = true;
 
-	psde->is_rt_pipe = (sde_crtc_get_client_type(crtc) != NRT_CLIENT);
 	_sde_plane_set_qos_ctrl(plane, false, SDE_PLANE_QOS_PANIC_CTRL);
 
 	/* update secure session flag */
@@ -4246,8 +4264,11 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 				&psde->sharp_cfg);
 	}
 
-	_sde_plane_set_qos_lut(plane, fb);
-	_sde_plane_set_danger_lut(plane, fb);
+	if (pstate->dirty & (SDE_PLANE_DIRTY_QOS | SDE_PLANE_DIRTY_RECTS |
+			     SDE_PLANE_DIRTY_FORMAT)) {
+		_sde_plane_set_qos_lut(plane, fb);
+		_sde_plane_set_danger_lut(plane, fb);
+	}
 
 	if (plane->type != DRM_PLANE_TYPE_CURSOR) {
 		_sde_plane_set_qos_ctrl(plane, true, SDE_PLANE_QOS_PANIC_CTRL);
@@ -4256,7 +4277,8 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 			_sde_plane_set_ts_prefill(plane, pstate);
 	}
 
-	_sde_plane_set_qos_remap(plane);
+	if (pstate->dirty & SDE_PLANE_DIRTY_QOS)
+		_sde_plane_set_qos_remap(plane);
 
 	/* clear dirty */
 	pstate->dirty = 0x0;
@@ -4618,7 +4640,7 @@ static void _sde_plane_install_properties(struct drm_plane *plane,
 			PLANE_PROP_FOLIAGE_COLOR);
 	}
 
-	if (psde->features & BIT(SDE_SSPP_VIG_GAMUT)) {
+	if (psde->features & BIT(SDE_SSPP_VIG_GAMUT) && !psde->is_virtual) {
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_VIG_3D_LUT_GAMUT_V",
 			psde->pipe_sblk->gamut_blk.version >> 16);
@@ -4626,7 +4648,7 @@ static void _sde_plane_install_properties(struct drm_plane *plane,
 			PLANE_PROP_VIG_GAMUT);
 	}
 
-	if (psde->features & BIT(SDE_SSPP_VIG_IGC)) {
+	if (psde->features & BIT(SDE_SSPP_VIG_IGC) && !psde->is_virtual) {
 		snprintf(feature_name, sizeof(feature_name), "%s%d",
 			"SDE_VIG_1D_LUT_IGC_V",
 			psde->pipe_sblk->igc_blk[0].version >> 16);

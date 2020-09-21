@@ -11,6 +11,28 @@
 #include "sched.h"
 #include "tune.h"
 
+#ifdef CONFIG_UCI
+#include <linux/uci/uci.h>
+
+// default boost value in power hal json for idling
+#define DEFAULT_FW_BOOST_VALUE 10
+#define TB_DIV_MAX 5
+
+static unsigned long log_boost_effect = 0;
+
+#define TB_DEBUG
+
+// default 1, touchboost is stock behavior
+static int touchboost = 1;
+// devide boost writes by this value (1-5)
+static int touchboost_divider = 1;
+
+static void uci_user_listener(void) {
+    touchboost = !!uci_get_user_property_int_mm("touchboost", 1,0,1);
+    touchboost_divider = uci_get_user_property_int_mm("touchboost_divider", 1,1,TB_DIV_MAX);
+}
+#endif
+
 bool schedtune_initialized = false;
 extern struct reciprocal_value schedtune_spc_rdiv;
 
@@ -31,6 +53,9 @@ struct schedtune {
 
 	/* Boost value for tasks on that SchedTune CGroup */
 	int boost;
+#ifdef CONFIG_UCI
+	int boost_from_user;
+#endif
 
 #ifdef CONFIG_SCHED_WALT
 	/* Toggle ability to override sched boost enabled */
@@ -56,6 +81,10 @@ struct schedtune {
 	/* Hint to bias scheduling of tasks on that SchedTune CGroup
 	 * towards idle CPUs */
 	int prefer_idle;
+
+	/* Hint to bias scheduling of tasks on that SchedTune CGroup
+	 * towards higher capacity CPUs */
+	bool prefer_high_cap;
 };
 
 static inline struct schedtune *css_st(struct cgroup_subsys_state *css)
@@ -82,9 +111,8 @@ static inline struct schedtune *parent_st(struct schedtune *st)
  * By default, system-wide boosting is disabled, i.e. no boosting is applied
  * to tasks which are not into a child control group.
  */
-static struct schedtune
-root_schedtune = {
-	.boost	= 0,
+static struct schedtune root_schedtune = {
+	.boost = 0,
 #ifdef CONFIG_SCHED_WALT
 	.sched_boost_no_override = false,
 	.sched_boost_enabled = true,
@@ -92,6 +120,7 @@ root_schedtune = {
 	.colocate_update_disabled = false,
 #endif
 	.prefer_idle = 0,
+	.prefer_high_cap = false,
 };
 
 /*
@@ -257,6 +286,16 @@ schedtune_cpu_update(int cpu, u64 now)
 	boost_max = max(boost_max, 0);
 	bg->boost_max = boost_max;
 	bg->boost_ts = boost_ts;
+#ifdef TB_DEBUG_TRACE
+	{
+		static int last_value = -1;
+		if (jiffies - log_boost_effect < 10 && boost_max!=last_value) {
+			pr_info("%s [cleanslate] set cpu boost to %d\n", __func__, boost_max);
+			last_value = boost_max;
+		}
+	}
+#endif
+
 }
 
 static int
@@ -267,6 +306,16 @@ schedtune_boostgroup_update(int idx, int boost)
 	int old_boost;
 	int cpu;
 	u64 now;
+
+#ifdef TB_DEBUG_TRACE
+	{
+		static int last_value = -1;
+		if (jiffies - log_boost_effect < 10 && boost!=last_value) {
+			pr_info("%s [cleanslate] set boostgroup boost to %d\n", __func__, boost);
+			last_value = boost;
+		}
+	}
+#endif
 
 	/* Update per CPU boost groups */
 	for_each_possible_cpu(cpu) {
@@ -545,6 +594,15 @@ int schedtune_task_boost(struct task_struct *p)
 	st = task_schedtune(p);
 	task_boost = st->boost;
 	rcu_read_unlock();
+#ifdef TB_DEBUG_TRACE
+	{
+		static int last_value = -1;
+		if (jiffies - log_boost_effect < 10 && task_boost!=last_value) {
+			pr_info("%s [cleanslate] set task boost to %d\n", __func__, task_boost);
+			last_value = task_boost;
+		}
+	}
+#endif
 
 	return task_boost;
 }
@@ -588,8 +646,12 @@ static s64
 boost_read(struct cgroup_subsys_state *css, struct cftype *cft)
 {
 	struct schedtune *st = css_st(css);
+#ifdef CONFIG_UCI
+	return st->boost_from_user;
+#else
 
 	return st->boost;
+#endif
 }
 
 #ifdef CONFIG_SCHED_WALT
@@ -624,10 +686,84 @@ boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	if (boost < 0 || boost > 100)
 		return -EINVAL;
 
+#ifdef CONFIG_UCI
+#ifndef TB_DEBUG
+	if (!touchboost)
+		pr_debug("%s [touchboost] new val: %d curr val: %d\n",__func__, boost, st->boost);
+	}
+#endif
+#ifdef TB_DEBUG
+	// debug logs only...
+	if (!touchboost)
+	{
+		char name_buf[NAME_MAX + 1];
+		cgroup_name(st->css.cgroup, name_buf, sizeof(name_buf));
+		pr_info("%s [touchboost] name: %s . new val: %d curr val: %d\n",__func__, name_buf, boost, st->boost);
+	}
+#endif
+	// if stock touchboosting is OFF, we deviate here from stock schedtune boost settings...
+	if (!touchboost && boost > 0) {
+		char name_buf[NAME_MAX + 1];
+		char *st_name = "top-app";
+		cgroup_name(st->css.cgroup, name_buf, sizeof(name_buf));
+		if (strncmp(name_buf, st_name, strlen(st_name)) == 0) {
+			// in case of 'top-app' - '30' (>=10) to '10' downgrade of boost, move to 0 instead, to spare higher cpu freqs.
+			if (st->boost_from_user >= DEFAULT_FW_BOOST_VALUE && boost == DEFAULT_FW_BOOST_VALUE) {
+				pr_info("%s [touchboost] Override to 0 boost --> name: %s . new val: %d curr val: %d\n",__func__, name_buf, boost, st->boost);
+				st->boost = 0;
+			} else {
+				// otherwise set a divided value... (for max divider simply set 1)
+				s64 set_value = touchboost_divider == TB_DIV_MAX ? 1 : (boost / touchboost_divider);
+				pr_info("%s [touchboost] Divide - to %d boost --> name: %s . new val: %d curr val: %d\n",__func__, set_value, name_buf, boost, st->boost);
+				st->boost = set_value;
+			}
+			log_boost_effect = jiffies;
+		} else {
+			st->boost = boost;
+		}
+	} else
+#endif
 	st->boost = boost;
+#ifdef CONFIG_UCI
+	st->boost_from_user = boost;
+#endif
 
 	/* Update CPU boost */
 	schedtune_boostgroup_update(st->idx, st->boost);
+
+	return 0;
+}
+
+int schedtune_prefer_high_cap(struct task_struct *p)
+{
+	struct schedtune *st;
+	int prefer_high_cap;
+
+	if (unlikely(!schedtune_initialized))
+		return 0;
+
+	/* Get prefer_high_cap value */
+	rcu_read_lock();
+	st = task_schedtune(p);
+	prefer_high_cap = st->prefer_high_cap;
+	rcu_read_unlock();
+
+	return prefer_high_cap;
+}
+
+static u64 prefer_high_cap_read(struct cgroup_subsys_state *css,
+				struct cftype *cft)
+{
+	struct schedtune *st = css_st(css);
+
+	return st->prefer_high_cap;
+}
+
+static int prefer_high_cap_write(struct cgroup_subsys_state *css,
+				 struct cftype *cft, u64 prefer_high_cap)
+{
+	struct schedtune *st = css_st(css);
+	st->prefer_high_cap = !!prefer_high_cap;
 
 	return 0;
 }
@@ -655,7 +791,12 @@ static struct cftype files[] = {
 		.read_u64 = prefer_idle_read,
 		.write_u64 = prefer_idle_write,
 	},
-	{ }	/* terminate */
+	{
+		.name = "prefer_high_cap",
+		.read_u64 = prefer_high_cap_read,
+		.write_u64 = prefer_high_cap_write,
+	},
+	{} /* terminate */
 };
 
 static int
@@ -769,37 +910,6 @@ schedtune_init_cgroups(void)
 	schedtune_initialized = true;
 }
 
-static struct schedtune *getSchedtune(char *st_name)
-{
-	int idx;
-
-	for (idx = 0; idx < BOOSTGROUPS_COUNT; ++idx) {
-		char name_buf[NAME_MAX + 1];
-		struct schedtune *st = allocated_group[idx];
-
-		if (!st) {
-			pr_warn("SCHEDTUNE: Could not find %s\n", st_name);
-			break;
-		}
-
-		cgroup_name(st->css.cgroup, name_buf, sizeof(name_buf));
-		if (strncmp(name_buf, st_name, strlen(st_name)) == 0)
-			return st;
-	}
-
-	return NULL;
-}
-
-void set_stune_boost(char *st_name, int boost)
-{
-	struct schedtune *st = getSchedtune(st_name);
-
-	if (!st)
-		return;
-
-	boost_write(&st->css, NULL, boost);
-}
-
 /*
  * Initialize the cgroup structures
  */
@@ -808,6 +918,9 @@ schedtune_init(void)
 {
 	schedtune_spc_rdiv = reciprocal_value(100);
 	schedtune_init_cgroups();
+#ifdef CONFIG_UCI
+	uci_add_user_listener(uci_user_listener);
+#endif
 	return 0;
 }
 postcore_initcall(schedtune_init);
