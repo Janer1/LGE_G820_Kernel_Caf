@@ -14,15 +14,15 @@ mv kernel_dtb dtb
 mv header_kr header
 ./magiskboot repack ./sample_kr.img
 mv header header_kr
-mv new-boot.img GamingNation/new-boot.img
-cd GamingNation
-zip -r GamingNation-KR.zip *
-mv GamingNation-KR.zip ../GamingNation-KR.zip
+mv new-boot.img Dragonfly/new-boot.img
+cd Dragonfly
+zip -r Dragonfly-KR.zip *
+mv Dragonfly-KR.zip ../Dragonfly-KR.zip
 cd ..
 mv header_us header
 ./magiskboot repack ./sample_us.img
 mv header header_us
-mv new-boot.img GamingNation/new-boot.img
-cd GamingNation
-zip -r GamingNation.zip *
-mv GamingNation-US.zip ../GamingNation-US.zip
+mv new-boot.img Dragonfly/new-boot.img
+cd Dragonfly
+zip -r Dragonfly-US.zip *
+mv Dragonfly-US.zip ../Dragonfly-US.zip
