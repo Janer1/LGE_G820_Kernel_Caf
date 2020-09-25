@@ -13,12 +13,12 @@ mv header header_kr
 mv new-boot.img Dragonfly/new-boot.img
 cd Dragonfly
 zip -r Dragonfly-KR.zip *
-mv Dragonfly-KR.zip ../Dragonfly-KR.zip
+mv DragonflyGE-KR.zip ../DragonflyGE-KR.zip
 cd ..
 mv header_us header
 ./magiskboot repack ./sample_us.img
 mv header header_us
 mv new-boot.img Dragonfly/new-boot.img
 cd Dragonfly
-zip -r Dragonfly-US.zip *
-mv Dragonfly-US.zip ../Dragonfly-US.zip
+zip -r DragonflyGE-US.zip *
+mv DragonflyGE-US.zip ../DragonflyGE-US.zip
