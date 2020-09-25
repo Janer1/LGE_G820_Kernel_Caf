@@ -16,7 +16,7 @@ mv header_kr header
 mv header header_kr
 mv new-boot.img Dragonfly/new-boot.img
 cd Dragonfly
-zip -r Dragonfly-KR.zip *
+zip -r DragonflyGE-KR.zip *
 mv DragonflyGE-KR.zip ../DragonflyGE-KR.zip
 cd ..
 mv header_us header
