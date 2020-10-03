@@ -2276,6 +2276,10 @@ void wcd_mbhc_deinit(struct wcd_mbhc *mbhc)
     devm_extcon_dev_unregister(codec->dev, mbhc->edev_voc_mute);
 #endif /* CONFIG_SND_LGE_VOC_MUTE_DET */
 
+#ifdef CONFIG_MACH_LGE
+	devm_extcon_dev_unregister(codec->dev, mbhc->edev);
+#endif
+
 	mbhc->mbhc_cb->free_irq(codec, mbhc->intr_ids->mbhc_sw_intr, mbhc);
 	mbhc->mbhc_cb->free_irq(codec, mbhc->intr_ids->mbhc_btn_press_intr,
 				mbhc);

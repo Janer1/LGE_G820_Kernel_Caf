@@ -149,10 +149,8 @@ struct bio {
 #define BIO_QUIET	6	/* Make BIO Quiet */
 #define BIO_CHAIN	7	/* chained bio, ->bi_remaining in effect */
 #define BIO_REFFED	8	/* bio has elevated ->bi_cnt */
-#define BIO_THROTTLED	9	/* This bio has already been subjected to
-				 * throttling rules. Don't do it again. */
-#define BIO_TRACE_COMPLETION 10	/* bio_endio() should trace the final completion
-				 * of this bio. */
+#define BIO_THROTTLED	9	/* This bio has already been subjected to throttling rules. Don't do it again. */
+#define BIO_TRACE_COMPLETION 10	/* bio_endio() should trace the final completion of this bio. */
 /* See BVEC_POOL_OFFSET below before adding new flags */
 
 /*
@@ -261,7 +259,6 @@ enum req_flag_bits {
 	 * set for "ide_preempt" requests and also for requests for which the
 	 * SCSI "quiesce" state must be ignored.
 	 */
-	__REQ_PREEMPT,
 	__REQ_NR_BITS,		/* stops here */
 };
 

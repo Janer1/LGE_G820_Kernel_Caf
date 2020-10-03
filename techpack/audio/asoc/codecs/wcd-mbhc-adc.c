@@ -906,6 +906,18 @@ report:
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ADC_MODE, 0);
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ADC_EN, 0);
 
+#ifdef CONFIG_MACH_LGE
+	if(plug_type == MBHC_PLUG_TYPE_HIGH_HPH) {
+		pr_info("%s: Change HIGH HPH to Headset. \n", __func__);
+		plug_type = MBHC_PLUG_TYPE_HEADSET;
+		if ((snd_soc_read(mbhc->codec, 0x0623) & 0x3f) != 0x22) {
+			pr_info("[LGE MBHC] %s: Raise mic bias to 2.7v. \n", __func__);
+			mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic(mbhc->codec, MIC_BIAS_2, true);
+			mbhc->micbias_enable = true;
+		}
+	}
+#endif
+
 	WCD_MBHC_RSC_LOCK(mbhc);
 	wcd_mbhc_find_plug_and_report(mbhc, plug_type);
 	WCD_MBHC_RSC_UNLOCK(mbhc);

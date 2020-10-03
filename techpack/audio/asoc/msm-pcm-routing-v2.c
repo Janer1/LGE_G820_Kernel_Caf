@@ -11472,6 +11472,10 @@ static const struct snd_kcontrol_new mmul17_mixer_controls[] = {
 	MSM_BACKEND_DAI_SEC_SPDIF_TX,
 	MSM_FRONTEND_DAI_MULTIMEDIA17, 1, 0, msm_routing_get_audio_mixer,
 	msm_routing_put_audio_mixer),
+	SOC_DOUBLE_EXT("USB_AUDIO_TX", SND_SOC_NOPM,
+	MSM_BACKEND_DAI_USB_TX,
+	MSM_FRONTEND_DAI_MULTIMEDIA17, 1, 0, msm_routing_get_audio_mixer,
+	msm_routing_put_audio_mixer),
 };
 
 static const struct snd_kcontrol_new mmul18_mixer_controls[] = {
@@ -17395,16 +17399,17 @@ static int msm_routing_put_lsm_app_type_cfg_control(
 	int shift = ((struct soc_multi_mixer_control *)
 				kcontrol->private_value)->shift;
 	int i = 0, j;
-	int num_app_types = ucontrol->value.integer.value[i++];
+	int num_app_types;
 
-	memset(lsm_app_type_cfg, 0, MAX_APP_TYPES*
-	       sizeof(struct msm_pcm_routing_app_type_data));
-
-	if (num_app_types > MAX_APP_TYPES) {
+	if (ucontrol->value.integer.value[0] > MAX_APP_TYPES) {
 		pr_err("%s: number of app types exceed the max supported\n",
 			__func__);
 		return -EINVAL;
 	}
+
+	num_app_types = ucontrol->value.integer.value[i++];
+	memset(lsm_app_type_cfg, 0, MAX_APP_TYPES*
+	       sizeof(struct msm_pcm_routing_app_type_data));
 
 	for (j = 0; j < num_app_types; j++) {
 		lsm_app_type_cfg[j].app_type =
@@ -21937,6 +21942,7 @@ static const struct snd_soc_dapm_route intercon[] = {
 	{"MultiMedia17 Mixer", "TX_CDC_DMA_TX_3", "TX_CDC_DMA_TX_3"},
 	{"MultiMedia17 Mixer", "TX_CDC_DMA_TX_4", "TX_CDC_DMA_TX_4"},
 	{"MultiMedia17 Mixer", "TX_CDC_DMA_TX_5", "TX_CDC_DMA_TX_5"},
+	{"MultiMedia17 Mixer", "USB_AUDIO_TX", "USB_AUDIO_TX"},
 
 	{"MultiMedia18 Mixer", "TX_CDC_DMA_TX_0", "TX_CDC_DMA_TX_0"},
 	{"MultiMedia18 Mixer", "TX_CDC_DMA_TX_1", "TX_CDC_DMA_TX_1"},

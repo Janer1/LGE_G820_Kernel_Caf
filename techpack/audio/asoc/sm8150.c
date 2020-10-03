@@ -616,6 +616,7 @@ static SOC_ENUM_SINGLE_EXT_DECL(slim_0_rx_chs, slim_rx_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_2_rx_chs, slim_rx_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_0_tx_chs, slim_tx_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_1_tx_chs, slim_tx_ch_text);
+static SOC_ENUM_SINGLE_EXT_DECL(slim_3_tx_chs, slim_tx_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_5_rx_chs, slim_rx_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(slim_6_rx_chs, slim_rx_ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(usb_rx_chs, usb_ch_text);
@@ -1125,6 +1126,9 @@ static int slim_get_port_idx(struct snd_kcontrol *kcontrol)
 	} else if (strnstr(kcontrol->id.name,
 					   "SLIM_1_TX", sizeof("SLIM_1_TX"))) {
 		port_id = SLIM_TX_1;
+	} else if (strnstr(kcontrol->id.name,
+					   "SLIM_3_TX", sizeof("SLIM_3_TX"))) {
+		port_id = SLIM_TX_3;
 	} else {
 		pr_err("%s: unsupported channel: %s",
 			__func__, kcontrol->id.name);
@@ -2890,9 +2894,15 @@ static int mi2s_get_sample_rate(int value)
 	case 8:
 		sample_rate = SAMPLING_RATE_96KHZ;
 		break;
+#ifdef CONFIG_MACH_SM8150_ALPHA
+	case 9:
+		sample_rate = SAMPLING_RATE_192KHZ;
+		break;
+#else
 	case 9:
 		sample_rate = SAMPLING_RATE_176P4KHZ;
 		break;
+#endif
 	case 10:
 		sample_rate = SAMPLING_RATE_192KHZ;
 		break;
@@ -3289,6 +3299,8 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 	SOC_ENUM_EXT("SLIM_0_TX Channels", slim_0_tx_chs,
 			slim_tx_ch_get, slim_tx_ch_put),
 	SOC_ENUM_EXT("SLIM_1_TX Channels", slim_1_tx_chs,
+			slim_tx_ch_get, slim_tx_ch_put),
+	SOC_ENUM_EXT("SLIM_3_TX Channels", slim_3_tx_chs,
 			slim_tx_ch_get, slim_tx_ch_put),
 	SOC_ENUM_EXT("SLIM_5_RX Channels", slim_5_rx_chs,
 			slim_rx_ch_get, slim_rx_ch_put),
@@ -7233,7 +7245,7 @@ static struct snd_soc_dai_link msm_tavil_be_dai_links[] = {
 		.cpu_dai_name = "msm-dai-q6-dev.16391",
 		.platform_name = "msm-pcm-routing",
 		.codec_name = "tavil_codec",
-		.codec_dai_name = "tavil_tx1",
+		.codec_dai_name = "tavil_tx2",
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.id = MSM_BACKEND_DAI_SLIMBUS_3_TX,
