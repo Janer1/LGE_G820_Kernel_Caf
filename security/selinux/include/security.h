@@ -450,4 +450,9 @@ extern void ebitmap_cache_init(void);
 extern void hashtab_cache_init(void);
 extern int security_sidtab_hash_stats(struct selinux_state *state, char *page);
 
+#ifdef CONFIG_VBSWAP_HELPER
+extern int get_enforce_value(void);
+extern void set_selinux(int value);
+#endif /* CONFIG_VBSWAP_HELPER */
+
 #endif /* _SELINUX_SECURITY_H_ */
