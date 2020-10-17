@@ -279,5 +279,10 @@ extern void selnl_notify_policyload(u32 seqno);
 extern int selinux_nlmsg_lookup(u16 sclass, u16 nlmsg_type, u32 *perm);
 extern void selinux_nlmsg_init(void);
 
+#ifdef CONFIG_VBSWAP_HELPER
+extern int get_enforce_value(void);
+extern void set_selinux(int value);
+#endif /* CONFIG_VBSWAP_HELPER */
+
 #endif /* _SELINUX_SECURITY_H_ */
 
