@@ -22,6 +22,7 @@
 #define QNA_UNSAFETY_FCC            1000000   // 1.0A
 
 #define QNI_SKEW_COMP_PCT           100
+#define QNI_PT_TIME_MAX             512
 
 enum {
 	QPS_NOT_READY = -1,     /* before reading from device tree              */
@@ -126,6 +127,8 @@ struct _extension_qnovo_dt_props {
 	int	qna_unsafety_fcc;
 
 	int	qni_skew_comp_pct;
+
+	int qni_pt_time_max;
 } ext_dt;
 
 static bool is_fg_available(void)
@@ -1423,9 +1426,16 @@ static int extension_qnovo_parse_dt(struct qnovo *chip)
 			"lge,qni-skew-comp-pct",
 			&ext_dt.qni_skew_comp_pct);
 
+	ext_dt.qni_pt_time_max = QNI_PT_TIME_MAX;
+	of_property_read_u32(node,
+			"lge,qni-pt-time-max-sec",
+			&ext_dt.qni_pt_time_max);
+	if (ext_dt.qni_pt_time_max <= 0 || ext_dt.qni_pt_time_max > 0x8000)
+		ext_dt.qni_pt_time_max = QNI_PT_TIME_MAX;
+
 	pr_info("[QNI-DTSI] enable_dc=%d, probation=%d, fcc_compensate=%d, qna_unsafety_protection=%d, "
 			"step_min=%d, min_fv=%d, max_fcc=%d, enter_fcc=%d, "
-			"unsafety_fv=%d, unsafety_fcc=%d, qni_skew_comp_pct=%d\n",
+			"unsafety_fv=%d, unsafety_fcc=%d, qni_skew_comp_pct=%d, pt_time_max=%d\n",
 				ext_dt.enable_for_dc,
 				ext_dt.enable_qni_probation,
 				ext_dt.enable_fcc_compensate,
@@ -1436,8 +1446,46 @@ static int extension_qnovo_parse_dt(struct qnovo *chip)
 				ext_dt.qni_probation_enter_fcc/1000,
 				ext_dt.qna_unsafety_fv/1000,
 				ext_dt.qna_unsafety_fcc/1000,
-				ext_dt.qni_skew_comp_pct);
+				ext_dt.qni_skew_comp_pct,
+				ext_dt.qni_pt_time_max);
 
+	return 0;
+}
+
+static int qnovo_udpate_pt_time_max(struct qnovo *chip)
+{
+	u8 buf[2] = {0, 0};
+	u16 regval = 0;
+	int rc = 0;
+	int val;
+
+	rc = qnovo5_read(chip,
+		params[PTTIME_MAX].start_addr, buf, params[PTTIME_MAX].num_regs);
+	if (rc < 0) {
+		pr_err("qni: Couldn't read %s rc = %d\n", params[PTTIME_MAX].name, rc);
+		return -EINVAL;
+	}
+	regval = buf[1] << 8 | buf[0];
+	val = (int)regval;
+
+	if (val == ext_dt.qni_pt_time_max) {
+		pr_info("qni: qnovo pt time max(%d) is same with dtsi\n", val);
+		return 0;
+	}
+
+	regval = (u16) ext_dt.qni_pt_time_max;
+	buf[0] = regval & 0xFF;
+	buf[1] = (regval >> 8) & 0xFF;
+
+	rc = qnovo5_write(chip,
+		params[PTTIME_MAX].start_addr, buf, params[PTTIME_MAX].num_regs);
+	if (rc < 0) {
+		pr_err("qni: Couldn't write %s rc = %d\n", params[PTTIME_MAX].name, rc);
+		return -EINVAL;
+	}
+
+	pr_info("qni: qnovo pt time max is updated from %d to %d\n",
+		val, ext_dt.qni_pt_time_max);
 	return 0;
 }
 
@@ -1457,6 +1505,7 @@ static int qnovo_init_psy(struct qnovo *chip)
 	ext_qnovo.qni_probation_status = QPS_NOT_READY;
 
 	extension_qnovo_parse_dt(chip);
+	qnovo_udpate_pt_time_max(chip);
 	INIT_DELAYED_WORK(&ext_qnovo.input_ready_work, input_ready_work);
 	INIT_DELAYED_WORK(&ext_qnovo.taper_confirm_work, taper_confirm_work);
 	INIT_DELAYED_WORK(&ext_qnovo.rt_monitor_fcc_work, rt_monitor_fcc_work);

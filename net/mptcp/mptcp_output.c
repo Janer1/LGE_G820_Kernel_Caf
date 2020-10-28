@@ -673,6 +673,14 @@ bool mptcp_write_xmit(struct sock *meta_sk, unsigned int mss_now, int nonagle,
 
 	tcp_mstamp_refresh(meta_tp);
 
+	if (inet_csk(meta_sk)->icsk_retransmits) {
+		/* If the timer already once fired, retransmit the head of the
+		 * queue to unblock us ASAP.
+		 */
+		if (meta_tp->packets_out && !mpcb->infinite_mapping_snd)
+			mptcp_retransmit_skb(meta_sk, tcp_write_queue_head(meta_sk));
+	}
+
 	while ((skb = mpcb->sched_ops->next_segment(meta_sk, &reinject, &subsk,
 						    &sublimit))) {
 		unsigned int limit;
@@ -1286,9 +1294,7 @@ void mptcp_send_active_reset(struct sock *meta_sk, gfp_t priority)
 	/* May happen if no subflow is in an appropriate state, OR
 	 * we are in infinite mode or about to go there - just send a reset
 	 */
-	if (!sk || mpcb->infinite_mapping_snd || mpcb->send_infinite_mapping ||
-	    mpcb->infinite_mapping_rcv) {
-
+	if (!sk || mptcp_in_infinite_mapping_weak(mpcb)) {
 		/* tcp_done must be handled with bh disabled */
 		if (!in_serving_softirq())
 			local_bh_disable();

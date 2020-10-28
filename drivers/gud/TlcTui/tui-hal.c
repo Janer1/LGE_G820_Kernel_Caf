@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2015-2017 TRUSTONIC LIMITED
+ * Copyright (c) 2015-2017,2019 TRUSTONIC LIMITED
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or
@@ -32,11 +32,11 @@
 #include <linux/version.h>
 
 /* We need to include this file to use two functions :
-	* qseecom_dmabuf_map
-	* qseecom_dmabuf_unmap
-   In the implementation of this two functions we need to export symbols and
-   add theirs prototypes into qseecom_kernel.h.
-   Please contact Trustonic to get patch example.
+ * qseecom_dmabuf_map
+ * qseecom_dmabuf_unmap
+ * In the implementation of this two functions we need to export symbols and
+ * add theirs prototypes into qseecom_kernel.h.
+ * Please contact Trustonic to get patch example.
  */
 #if KERNEL_VERSION(4, 14, 0) <= LINUX_VERSION_CODE
 #include <qseecom_kernel.h>

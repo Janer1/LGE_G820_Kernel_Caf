@@ -824,7 +824,13 @@ struct sock *inet_csk_clone_lock(const struct sock *sk,
 				 const struct request_sock *req,
 				 const gfp_t priority)
 {
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+	struct sock *newsk;
+
+	newsk = sk_clone_lock(sk, priority);
+#else
 	struct sock *newsk = sk_clone_lock(sk, priority);
+#endif
 
 	if (newsk) {
 		struct inet_connection_sock *newicsk = inet_csk(newsk);
@@ -1026,9 +1032,11 @@ void inet_csk_listen_stop(struct sock *sk)
 		struct sock *child = req->sk;
 #ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
 		bool mutex_taken = false;
+		struct mptcp_cb *mpcb = tcp_sk(child)->mpcb;
 
 		if (is_meta_sk(child)) {
-			mutex_lock(&tcp_sk(child)->mpcb->mpcb_mutex);
+			WARN_ON(atomic_inc_not_zero(&mpcb->mpcb_refcnt) == 0);
+			mutex_lock(&mpcb->mpcb_mutex);
 			mutex_taken = true;
 		}
 #endif
@@ -1042,8 +1050,10 @@ void inet_csk_listen_stop(struct sock *sk)
 		bh_unlock_sock(child);
 		local_bh_enable();
 #ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
-		if (mutex_taken)
-			mutex_unlock(&tcp_sk(child)->mpcb->mpcb_mutex);
+		if (mutex_taken) {
+			mutex_unlock(&mpcb->mpcb_mutex);
+			mptcp_mpcb_put(mpcb);
+		}
 #endif
 		sock_put(child);
 
@@ -1149,4 +1159,3 @@ out:
 	return dst;
 }
 EXPORT_SYMBOL_GPL(inet_csk_update_pmtu);
-

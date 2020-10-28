@@ -379,6 +379,9 @@ next_subflow:
 	mutex_lock(&mpcb->mpcb_mutex);
 	lock_sock_nested(meta_sk, SINGLE_DEPTH_NESTING);
 
+	if (!mptcp(tcp_sk(meta_sk)))
+		goto exit;
+
 	iter++;
 
 	if (sock_flag(meta_sk, SOCK_DEAD))
@@ -435,6 +438,7 @@ exit:
 	kfree(mptcp_local);
 	release_sock(meta_sk);
 	mutex_unlock(&mpcb->mpcb_mutex);
+	mptcp_mpcb_put(mpcb);
 	sock_put(meta_sk);
 }
 
@@ -477,7 +481,7 @@ next_subflow:
 	mutex_lock(&mpcb->mpcb_mutex);
 	lock_sock_nested(meta_sk, SINGLE_DEPTH_NESTING);
 
-	if (sock_flag(meta_sk, SOCK_DEAD))
+	if (sock_flag(meta_sk, SOCK_DEAD) || !mptcp(tcp_sk(meta_sk)))
 		goto exit;
 
 	if (mpcb->master_sk &&
@@ -593,6 +597,7 @@ next_subflow:
 
 	if (retry && !delayed_work_pending(&fmp->subflow_retry_work)) {
 		sock_hold(meta_sk);
+		atomic_inc(&mpcb->mpcb_refcnt);
 		queue_delayed_work(mptcp_wq, &fmp->subflow_retry_work,
 				   msecs_to_jiffies(MPTCP_SUBFLOW_RETRY_DELAY));
 	}
@@ -601,6 +606,7 @@ exit:
 	kfree(mptcp_local);
 	release_sock(meta_sk);
 	mutex_unlock(&mpcb->mpcb_mutex);
+	mptcp_mpcb_put(mpcb);
 	sock_put(meta_sk);
 }
 
@@ -880,9 +886,7 @@ duno:
 				goto next;
 
 			if (!mptcp(meta_tp) || !is_meta_sk(meta_sk) ||
-			    mpcb->infinite_mapping_snd ||
-			    mpcb->infinite_mapping_rcv ||
-			    mpcb->send_infinite_mapping)
+			    mptcp_in_infinite_mapping_weak(mpcb))
 				goto next;
 
 			/* May be that the pm has changed in-between */
@@ -1291,7 +1295,7 @@ static int inet6_addr_event(struct notifier_block *this, unsigned long event,
 	      event == NETDEV_CHANGE))
 		return NOTIFY_DONE;
 
-	if (!ipv6_dad_finished(ifa6))
+	if (sysctl_mptcp_enabled && !ipv6_dad_finished(ifa6))
 		dad_setup_timer(ifa6);
 	else
 		addr6_event_handler(ifa6, event, net);
@@ -1480,11 +1484,10 @@ fallback:
 
 static void full_mesh_create_subflows(struct sock *meta_sk)
 {
-	const struct mptcp_cb *mpcb = tcp_sk(meta_sk)->mpcb;
+	struct mptcp_cb *mpcb = tcp_sk(meta_sk)->mpcb;
 	struct fullmesh_priv *fmp = fullmesh_get_priv(mpcb);
 
-	if (mpcb->infinite_mapping_snd || mpcb->infinite_mapping_rcv ||
-	    mpcb->send_infinite_mapping ||
+	if (mptcp_in_infinite_mapping_weak(mpcb) ||
 	    mpcb->server_side || sock_flag(meta_sk, SOCK_DEAD))
 		return;
 
@@ -1494,6 +1497,7 @@ static void full_mesh_create_subflows(struct sock *meta_sk)
 
 	if (!work_pending(&fmp->subflow_work)) {
 		sock_hold(meta_sk);
+		atomic_inc(&mpcb->mpcb_refcnt);
 		queue_work(mptcp_wq, &fmp->subflow_work);
 	}
 }
@@ -1505,8 +1509,7 @@ static void full_mesh_subflow_error(struct sock *meta_sk, struct sock *sk)
 	if (!create_on_err)
 		return;
 
-	if (mpcb->infinite_mapping_snd || mpcb->infinite_mapping_rcv ||
-	    mpcb->send_infinite_mapping ||
+	if (mptcp_in_infinite_mapping_weak(mpcb) ||
 	    mpcb->server_side || sock_flag(meta_sk, SOCK_DEAD))
 		return;
 

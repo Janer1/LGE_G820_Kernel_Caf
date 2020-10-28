@@ -26,6 +26,7 @@
 #include "triton/lge_triton.h"
 
 static struct lge_prm prm = {
+	.init_done_flag    = false,
 	.cnode             = NULL,
 	.enable_mask       = LGE_PRM_INIT_DONE,
 	.init_mask         = LGE_PRM_INIT_MAX,
@@ -36,13 +37,25 @@ static struct lge_prm prm = {
 	.ds_state  = LGE_PRM_DS_CONNECTION_OFF,
 };
 
+static void lge_prm_lock(void)
+{
+	if (prm.init_done_flag)
+		mutex_lock(&prm.prm_lock);
+}
+
+static void lge_prm_unlock(void)
+{
+	if (prm.init_done_flag)
+		mutex_unlock(&prm.prm_lock);
+}
+
 void lge_prm_display_set_event(enum display_event event, int value)
 {
 	switch (event) {
 	case LGE_PRM_DISPLAY_EVENT_MAIN_STATE:
-		mutex_lock(&prm.prm_lock);
+		lge_prm_lock();
 		prm.main_display_mode = value;
-		mutex_unlock(&prm.prm_lock);
+		lge_prm_unlock();
 
 		if (prm.enable_mask & LGE_PRM_INIT_SBEN)
 			lge_sben_notify();
@@ -51,9 +64,9 @@ void lge_prm_display_set_event(enum display_event event, int value)
 			lge_intv_panel_power_notify();
 		break;
 	case LGE_PRM_DISPLAY_EVENT_DD_STATE:
-		mutex_lock(&prm.prm_lock);
+		lge_prm_lock();
 		prm.ds1_display_mode = value;
-		mutex_unlock(&prm.prm_lock);
+		lge_prm_unlock();
 
 		if (prm.enable_mask & LGE_PRM_INIT_DD) {
 			lge_dd_connect_notify();
@@ -61,25 +74,25 @@ void lge_prm_display_set_event(enum display_event event, int value)
 		}
 		break;
 	case LGE_PRM_DISPLAY_EVENT_DD2_STATE:
-		mutex_lock(&prm.prm_lock);
+		lge_prm_lock();
 		prm.ds2_connect_mode = value;
-		mutex_unlock(&prm.prm_lock);
+		lge_prm_unlock();
 
 		if (prm.enable_mask & LGE_PRM_INIT_DD)
 			lge_dd_state_notify();
 		break;
 	case LGE_PRM_DISPLAY_EVENT_HALLIC_STATE:
-		mutex_lock(&prm.prm_lock);
+		lge_prm_lock();
 		prm.hallic_mode = value;
-		mutex_unlock(&prm.prm_lock);
+		lge_prm_unlock();
 
 		if (prm.enable_mask & LGE_PRM_INIT_DD)
 			lge_dd_state_notify();
 		break;
 	case LGE_PRM_DISPLAY_EVENT_DS_STATE:
-		mutex_lock(&prm.prm_lock);
+		lge_prm_lock();
 		prm.ds_state = value;
-		mutex_unlock(&prm.prm_lock);
+		lge_prm_unlock();
 		break;
 	case LGE_PRM_DISPLAY_EVENT_MAX:
 	default :
@@ -92,7 +105,7 @@ int lge_prm_get_info(int info)
 {
 	int data = 0;
 
-	mutex_lock(&prm.prm_lock);
+	lge_prm_lock();
 
 	switch (info) {
 	case LGE_PRM_INFO_DISPLAY_MAIN_STATE:
@@ -131,7 +144,7 @@ int lge_prm_get_info(int info)
 		break;
 	};
 
-	mutex_unlock(&prm.prm_lock);
+	lge_prm_unlock();
 
 	return data;
 }
@@ -169,8 +182,9 @@ static int lge_prm_probe(struct platform_device *pdev)
 	node = pdev->dev.of_node;
 
 	mutex_init(&prm.prm_lock);
+	prm.init_done_flag = true;
 
-	mutex_lock(&prm.prm_lock);
+	lge_prm_lock();
 
 	/* Get properties */
 	if (of_property_read_bool(node, "lge,vfps-enabled"))
@@ -264,7 +278,7 @@ static int lge_prm_probe(struct platform_device *pdev)
 			pr_err(PRM_TAG "LGE DD is not enabled\n");
 	}
 
-	mutex_unlock(&prm.prm_lock);
+	lge_prm_unlock();
 
 	/* Probe defer until init_mask to 0x0 */
 	if (prm.init_mask != LGE_PRM_INIT_DONE) {

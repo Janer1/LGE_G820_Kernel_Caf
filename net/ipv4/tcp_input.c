@@ -6051,8 +6051,13 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 #ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
 		if (tp->request_mptcp || mptcp(tp)) {
 			int ret;
+
+			rcu_read_lock();
+			local_bh_disable();
 			ret = mptcp_rcv_synsent_state_process(sk, &sk,
 							      skb, &mopt);
+			local_bh_enable();
+			rcu_read_unlock();
 
 			/* May have changed if we support MPTCP */
 			tp = tcp_sk(sk);
@@ -6328,10 +6333,6 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		tcp_urg(sk, skb, th);
 		__kfree_skb(skb);
 		tcp_data_snd_check(sk);
-#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
-		if (mptcp(tp) && is_master_tp(tp))
-			bh_unlock_sock(sk);
-#endif
 		return 0;
 	}
 
@@ -6437,10 +6438,24 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		 * using an MP_JOIN subtype.
 		 */
 		if (mptcp(tp)) {
-			if (is_master_tp(tp))
+			if (is_master_tp(tp)) {
 				mptcp_update_metasocket(mptcp_meta_sk(sk));
-			else
+			} else {
+				struct sock *meta_sk = mptcp_meta_sk(sk);
+
 				tcp_send_ack(sk);
+
+				/* Update RTO as it might be worse/better */
+				mptcp_set_rto(sk);
+
+				/* If the new RTO would fire earlier, pull it in! */
+				if (tcp_sk(meta_sk)->packets_out &&
+				    icsk->icsk_timeout > inet_csk(meta_sk)->icsk_rto + jiffies) {
+					tcp_rearm_rto(meta_sk);
+				}
+
+				mptcp_push_pending_frames(mptcp_meta_sk(sk));
+			}
 		}
 #endif
 		break;
@@ -6883,11 +6898,16 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 				    &foc, TCP_SYNACK_FASTOPEN);
 		/* Add the child socket directly into the accept queue */
 #ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
-		inet_csk_reqsk_queue_add(sk, req, meta_sk);
-#endif
+		if (!inet_csk_reqsk_queue_add(sk, req, meta_sk)) {
+#else
 		if (!inet_csk_reqsk_queue_add(sk, req, fastopen_sk)) {
+#endif
 			reqsk_fastopen_remove(fastopen_sk, req, false);
 			bh_unlock_sock(fastopen_sk);
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+			if (meta_sk != fastopen_sk)
+				bh_unlock_sock(meta_sk);
+#endif
 			sock_put(fastopen_sk);
 			reqsk_put(req);
 			goto drop;

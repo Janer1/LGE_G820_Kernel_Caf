@@ -548,7 +548,7 @@ void diag_update_sleeping_process_atd(int data_type)
 	mutex_lock(&driver->diagchar_mutex);
 	for (i = 0; i < driver->num_clients; i++)
 		if (!strcmp(driver->client_map[i].name, "atd")) {
-			pr_debug("%s: process atd found\n", __func__);
+			pr_info("%s: process atd found\n", __func__);
 			driver->data_ready[i] |= data_type;
 			atomic_inc(&driver->data_ready_notif[i]);
 			break;
@@ -582,9 +582,6 @@ static int diag_send_data(struct diag_cmd_reg_t *entry, unsigned char *buf,
 		return -EIO;
 
 #ifdef CONFIG_LGE_USB_DIAG_LOCK_SPR
-#ifdef CONFIG_LGE_ONE_BINARY_SKU
-	if (lge_get_laop_operator() == OP_SPR_US)
-#endif
 	if ((*(unsigned char *)(buf)) == 0x27) {
 		if (((*(unsigned char *)(buf+1)) == 0x16) && ((*(unsigned char *)(buf+2)) == 0x84)) {
 			diag_update_pkt_buffer(buf, len, PKT_TYPE);
@@ -678,9 +675,6 @@ int diag_process_stm_cmd(unsigned char *buf, int len, unsigned char *dest_buf)
 		if (mask & DIAG_STM_CDSP)
 			diag_process_stm_mask(cmd, DIAG_STM_CDSP,
 						PERIPHERAL_CDSP);
-		if (mask & DIAG_STM_NPU)
-			diag_process_stm_mask(cmd, DIAG_STM_NPU,
-						PERIPHERAL_NPU);
 
 		if (mask & DIAG_STM_APPS)
 			diag_process_stm_mask(cmd, DIAG_STM_APPS, APPS_DATA);
@@ -705,9 +699,6 @@ int diag_process_stm_cmd(unsigned char *buf, int len, unsigned char *dest_buf)
 	if (driver->feature[PERIPHERAL_CDSP].stm_support)
 		rsp_supported |= DIAG_STM_CDSP;
 
-	if (driver->feature[PERIPHERAL_NPU].stm_support)
-		rsp_supported |= DIAG_STM_NPU;
-
 	rsp_supported |= DIAG_STM_APPS;
 
 	/* Set mask denoting STM state/status for each peripheral/APSS */
@@ -725,9 +716,6 @@ int diag_process_stm_cmd(unsigned char *buf, int len, unsigned char *dest_buf)
 
 	if (driver->stm_state[PERIPHERAL_CDSP])
 		rsp_status |= DIAG_STM_CDSP;
-
-	if (driver->stm_state[PERIPHERAL_NPU])
-		rsp_status |= DIAG_STM_NPU;
 
 	if (driver->stm_state[APPS_DATA])
 		rsp_status |= DIAG_STM_APPS;
@@ -1932,9 +1920,9 @@ static int diagfwd_mux_write_done(unsigned char *buf, int len, int buf_ctxt,
 				  int ctxt)
 {
 	unsigned long flags;
-	int peripheral = -1, type = -1;
-	int num = -1, hdlc_ctxt = -1;
-	struct diag_apps_data_t *temp = NULL;
+	int peripheral = -1;
+	int type = -1;
+	int num = -1;
 
 	if (!buf || len < 0)
 		return -EINVAL;
@@ -1953,27 +1941,9 @@ static int diagfwd_mux_write_done(unsigned char *buf, int len, int buf_ctxt,
 			diag_ws_on_copy(DIAG_WS_MUX);
 		} else if (peripheral == APPS_DATA) {
 			spin_lock_irqsave(&driver->diagmem_lock, flags);
-			hdlc_ctxt = GET_HDLC_CTXT(buf_ctxt);
-			if ((hdlc_ctxt == HDLC_CTXT) && hdlc_data.allocated)
-				temp = &hdlc_data;
-			else if ((hdlc_ctxt == NON_HDLC_CTXT) &&
-				non_hdlc_data.allocated)
-				temp = &non_hdlc_data;
-			else
-				DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
-				"No apps data buffer is allocated to be freed\n");
-			if (temp) {
-				DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
-				"Freeing Apps data buffer after write done hdlc_ctxt: %d, hdlc.allocated: %d, non_hdlc.allocated: %d\n",
-				hdlc_ctxt,
-				hdlc_data.allocated, non_hdlc_data.allocated);
-				diagmem_free(driver, temp->buf, POOL_TYPE_HDLC);
-				temp->buf = NULL;
-				temp->len = 0;
-				temp->allocated = 0;
-				temp->flushed = 0;
-				wake_up_interruptible(&driver->hdlc_wait_q);
-			}
+			diagmem_free(driver, (unsigned char *)buf,
+				     POOL_TYPE_HDLC);
+			buf = NULL;
 			spin_unlock_irqrestore(&driver->diagmem_lock, flags);
 		} else {
 			pr_err_ratelimited("diag: Invalid peripheral %d in %s, type: %d\n",

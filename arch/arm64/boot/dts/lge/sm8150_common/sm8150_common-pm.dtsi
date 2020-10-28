@@ -849,4 +849,5 @@
 	lge,qna-unsafety-fcc = <1000000>;
 
 	lge,qni-skew-comp-pct = <100>;
+	lge,qni-pt-time-max-sec = <512>;
 };

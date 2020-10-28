@@ -201,6 +201,7 @@ enum {
 	SWIPE_L,
 	SWIPE_R2,
 	SWIPE_L2,
+	SWIPE_DEFAULT,
 };
 
 enum {

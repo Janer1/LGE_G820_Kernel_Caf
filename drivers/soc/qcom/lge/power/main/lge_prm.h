@@ -84,6 +84,7 @@ enum {
 };
 
 struct lge_prm {
+	bool init_done_flag;
 	struct class  *cnode;
 	int           enable_mask;
 	int           init_mask;

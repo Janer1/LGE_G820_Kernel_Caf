@@ -195,7 +195,9 @@ static int mhi_arch_esoc_ops_power_on(void *priv, unsigned int flags)
 
 	/* reset rpm state */
 	pm_runtime_set_active(&pci_dev->dev);
-	pm_runtime_enable(&pci_dev->dev);
+	/* force enable of PM runtime for device */
+	while(!pm_runtime_enabled(&pci_dev->dev))
+		pm_runtime_enable(&pci_dev->dev);
 	mutex_unlock(&mhi_cntrl->pm_mutex);
 	pm_runtime_forbid(&pci_dev->dev);
 	ret = pm_runtime_get_sync(&pci_dev->dev);
@@ -434,6 +436,7 @@ static int mhi_bl_probe(struct mhi_device *mhi_device,
 							 node_name, 0);
 	ipc_log_string(arch_info->boot_ipc_log, HLOG
 		       "Entered SBL, Session ID:0x%x\n", mhi_cntrl->session_id);
+	pr_err("esoc-mdm Session ID:0x%x\n", mhi_cntrl->session_id);
 
 #ifdef CONFIG_LGE_DUAL_QFUSE
 	write_fuse_status(SBL_LOAD);
