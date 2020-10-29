@@ -337,7 +337,7 @@ char *put_dec(char *buf, unsigned long long n)
  *
  * If speed is not important, use snprintf(). It's easy to read the code.
  */
-int num_to_str(char *buf, int size, unsigned long long num, unsigned int width)
+int num_to_str(char *buf, int size, unsigned long long num)
 {
 	/* put_dec requires 2-byte alignment of the buffer. */
 	char tmp[sizeof(num) * 3] __aligned(2);
@@ -351,21 +351,11 @@ int num_to_str(char *buf, int size, unsigned long long num, unsigned int width)
 		len = put_dec(tmp, num) - tmp;
 	}
 
-	if (len > size || width > size)
+	if (len > size)
 		return 0;
-
-	if (width > len) {
-		width = width - len;
-		for (idx = 0; idx < width; idx++)
-			buf[idx] = ' ';
-	} else {
-		width = 0;
-	}
-
 	for (idx = 0; idx < len; ++idx)
-		buf[idx + width] = tmp[len - idx - 1];
-
-	return len + width;
+		buf[idx] = tmp[len - idx - 1];
+	return len;
 }
 
 #define SIGN	1		/* unsigned/signed, must be 1 */
@@ -1702,12 +1692,16 @@ static int __init initialize_ptr_random(void)
 early_initcall(initialize_ptr_random);
 
 /* Maps a pointer to a 32 bit unique identifier. */
-static inline int __ptr_to_hashval(const void *ptr, unsigned long *hashval_out)
+static char *ptr_to_id(char *buf, char *end, void *ptr, struct printf_spec spec)
 {
 	unsigned long hashval;
+	const int default_width = 2 * sizeof(ptr);
 
-	if (unlikely(!have_filled_random_ptr_key))
-		return -EAGAIN;
+	if (unlikely(!have_filled_random_ptr_key)) {
+		spec.field_width = default_width;
+		/* string length must be less than default_width */
+		return string(buf, end, "(ptrval)", spec);
+	}
 
 #ifdef CONFIG_64BIT
 	hashval = (unsigned long)siphash_1u64((u64)ptr, &ptr_key);
@@ -1719,27 +1713,6 @@ static inline int __ptr_to_hashval(const void *ptr, unsigned long *hashval_out)
 #else
 	hashval = (unsigned long)siphash_1u32((u32)ptr, &ptr_key);
 #endif
-	*hashval_out = hashval;
-	return 0;
-}
-
-int ptr_to_hashval(const void *ptr, unsigned long *hashval_out)
-{
-	return __ptr_to_hashval(ptr, hashval_out);
-}
-
-static char *ptr_to_id(char *buf, char *end, void *ptr, struct printf_spec spec)
-{
-	unsigned long hashval;
-	const int default_width = 2 * sizeof(ptr);
-	int ret;
-
-	ret = __ptr_to_hashval(ptr, &hashval);
-	if (ret) {
-		spec.field_width = default_width;
-		/* string length must be less than default_width */
-		return string(buf, end, "(ptrval)", spec);
-	}
 
 	spec.flags |= SMALL;
 	if (spec.field_width == -1) {
@@ -1955,9 +1928,6 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 			return buf;
 		}
 	case 'K':
-		if (!kptr_restrict ||
-		    IS_ENABLED(CONFIG_DEBUG_CONSOLE_UNHASHED_POINTERS))
-			break;
 		return restricted_pointer(buf, end, ptr, spec);
 	case 'N':
 		return netdev_bits(buf, end, ptr, fmt);
@@ -1986,9 +1956,6 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 	case 'x':
 		return pointer_string(buf, end, ptr, spec);
 	}
-
-	if (IS_ENABLED(CONFIG_DEBUG_CONSOLE_UNHASHED_POINTERS))
-		return pointer_string(buf, end, ptr, spec);
 
 	/* default is to _not_ leak addresses, hash before printing */
 	return ptr_to_id(buf, end, ptr, spec);
