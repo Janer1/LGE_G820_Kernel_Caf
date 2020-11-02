@@ -5539,10 +5539,8 @@ static void wq_watchdog_timer_fn(unsigned long data)
 
 	rcu_read_unlock();
 
-	if (lockup_detected) {
+	if (lockup_detected)
 		show_workqueue_state();
-		BUG();
-	}
 
 	wq_watchdog_reset_touched();
 	mod_timer(&wq_watchdog_timer, jiffies + thresh);
