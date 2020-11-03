@@ -32,7 +32,7 @@ extract() {
 }
 
 print "#######################################"
-print "#        Dragonfly Kernel v1.2        #"
+print "#        Dragonfly Kernel v1.4        #"
 print "#             by Anh Tran             #"
 print "#######################################"
 print
