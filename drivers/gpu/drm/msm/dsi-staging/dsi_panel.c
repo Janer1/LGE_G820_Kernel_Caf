@@ -37,7 +37,7 @@ extern int lge_get_mfts_mode(void);
 #endif
 
 #ifdef CONFIG_KLAPSE
-#include "../sde/klapse.h"
+#include <linux/klapse.h>
 #endif
 
 /**
