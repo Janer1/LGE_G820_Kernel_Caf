@@ -36,6 +36,10 @@
 extern int lge_get_mfts_mode(void);
 #endif
 
+#ifdef CONFIG_KLAPSE
+#include "../sde/klapse.h"
+#endif
+
 /**
  * topology is currently defined by a set of following 3 values:
  * 1. num of layer mixers
@@ -656,6 +660,10 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
 	if (rc < 0)
 		pr_err("failed to update dcs backlight:%d\n", bl_lvl);
+
+#ifdef CONFIG_KLAPSE
+	set_rgb_slider(bl_lvl);
+#endif
 
 	return rc;
 }
