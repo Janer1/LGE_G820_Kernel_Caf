@@ -40,7 +40,7 @@
 
 #define LIC "GPLv2"
 #define AUT "tanish2k09"
-#define VER "4.1"
+#define VER "4.2"
 
 MODULE_LICENSE(LIC);
 MODULE_AUTHOR(AUT);
@@ -64,7 +64,7 @@ static bool brightness_factor_auto_enable;
  */
 static int target_minute;
 static unsigned int b_cache;
-static int current_r, current_g, current_b;
+static unsigned int current_r, current_g, current_b;
 static unsigned int active_minutes, last_bl;
 static unsigned long local_time;
 static struct rtc_time tm;
@@ -93,7 +93,7 @@ static void calc_active_minutes(void)
     else
         active_minutes = (klapse_stop_hour - klapse_start_hour)*60;
         
-    target_minute = (active_minutes*10)/klapse_scaling_rate;
+    klapse_scaling_rate = (active_minutes*10)/target_minute;
 }
 
 static int get_minutes_since_start(void)
@@ -344,12 +344,12 @@ static ssize_t daytime_r_show(struct device *dev,
 static ssize_t daytime_r_dump(struct device *dev,
     struct device_attribute *attr, const char *buf, size_t count)
 {
-    int tmpval = 0;
+    unsigned int tmpval = 0;
 
     if (!sscanf(buf, "%u", &tmpval))
       return -EINVAL;
 
-    if ((tmpval > (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
+    if ((tmpval >= (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
     {
         daytime_r = tmpval;
         if (enable_klapse == 0)
@@ -379,12 +379,12 @@ static ssize_t daytime_g_show(struct device *dev,
 static ssize_t daytime_g_dump(struct device *dev,
     struct device_attribute *attr, const char *buf, size_t count)
 {
-    int tmpval = 0;
+    unsigned int tmpval = 0;
 
     if (!sscanf(buf, "%u", &tmpval))
         return -EINVAL;
 
-    if ((tmpval > (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
+    if ((tmpval >= (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
     {
         daytime_g = tmpval;
         if (enable_klapse == 0)
@@ -414,12 +414,12 @@ static ssize_t daytime_b_show(struct device *dev,
 static ssize_t daytime_b_dump(struct device *dev,
     struct device_attribute *attr, const char *buf, size_t count)
 {
-    int tmpval = 0;
+    unsigned int tmpval = 0;
 
     if (!sscanf(buf, "%u", &tmpval))
         return -EINVAL;
 
-    if ((tmpval > (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
+    if ((tmpval >= (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
     {
         daytime_b = tmpval;
         if (enable_klapse == 0)
@@ -449,12 +449,12 @@ static ssize_t target_r_show(struct device *dev,
 static ssize_t target_r_dump(struct device *dev,
     struct device_attribute *attr, const char *buf, size_t count)
 {
-    int tmpval = 0;
+    unsigned int tmpval = 0;
 
     if (!sscanf(buf, "%u", &tmpval))
       return -EINVAL;
 
-    if ((tmpval > (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
+    if ((tmpval >= (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
     {
         target_r = tmpval;
         if (enable_klapse == 2)
@@ -482,12 +482,12 @@ static ssize_t target_g_show(struct device *dev,
 static ssize_t target_g_dump(struct device *dev,
     struct device_attribute *attr, const char *buf, size_t count)
 {
-    int tmpval = 0;
+    unsigned int tmpval = 0;
 
     if (!sscanf(buf, "%u", &tmpval))
       return -EINVAL;
 
-    if ((tmpval > (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
+    if ((tmpval >= (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
     {
         target_g = tmpval;
         if (enable_klapse == 2)
@@ -515,12 +515,12 @@ static ssize_t target_b_show(struct device *dev,
 static ssize_t target_b_dump(struct device *dev,
     struct device_attribute *attr, const char *buf, size_t count)
 {
-    int tmpval = 0;
+    unsigned int tmpval = 0;
 
     if (!sscanf(buf, "%u", &tmpval))
       return -EINVAL;
 
-    if ((tmpval > (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
+    if ((tmpval >= (SCALE_VAL_MIN)) && (tmpval <= MAX_SCALE))
     {
         target_b = tmpval;
         if (enable_klapse == 2)
@@ -607,10 +607,10 @@ static ssize_t klapse_scaling_rate_dump(struct device *dev,
     if (!sscanf(buf, "%u", &tmpval))
       return -EINVAL;
 
-    if ((tmpval > 0) && (tmpval < (MAX_SCALE*10)))
+    if ((tmpval > 0) && (tmpval < active_minutes))
     {
-        klapse_scaling_rate = tmpval;
-        target_minute = (active_minutes*10)/klapse_scaling_rate;
+        target_minute = tmpval;
+        klapse_scaling_rate = (active_minutes*10)/target_minute;
     }
 
     return count;
@@ -636,12 +636,12 @@ static ssize_t brightness_factor_dump(struct device *dev,
 
     if ((tmpval >= 2) && (tmpval <= 10))
     {
-        b_cache = tmpval;
         if (brightness_factor_auto_enable == 0)
         {
-          brightness_factor = b_cache;
-          set_rgb_brightness(K_RED, K_GREEN, K_BLUE);
+          brightness_factor = tmp;
+          set_rgb_brightness((K_RED*10)/b_cache, (K_GREEN*10)/b_cache, (K_BLUE*10)/b_cache);
         }
+        b_cache = tmp;
     }
 
     return count;
@@ -826,7 +826,7 @@ static ssize_t fadeback_minutes_dump(struct device *dev,
     if (!sscanf(buf, "%u", &tmp))
       return -EINVAL;     
 
-    if ((tmp >= 2) && (tmp <= active_minutes))
+    if ((tmp >= 0) && (tmp <= active_minutes))
     {
         fadeback_minutes = tmp;
         flush_timer();
@@ -870,7 +870,7 @@ static void values_setup(void)
     target_b = (MAX_SCALE*59)/100;
     brightness_factor = 10;
     b_cache = brightness_factor;
-    klapse_scaling_rate = 30;
+    target_minute = 300;
     klapse_start_hour = 17;
     klapse_stop_hour = 7;
     brightness_factor_auto_start_hour = 23;
