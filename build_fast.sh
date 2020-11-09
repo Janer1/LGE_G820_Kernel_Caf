@@ -37,3 +37,6 @@ mv new-boot.img Dragonfly/new-boot.img
 cd Dragonfly
 zip -r Dragonfly-US.zip *
 mv Dragonfly-US.zip ../Dragonfly-US-TWRP.zip
+cd ..
+rm ramdisk.cpio
+rm header
