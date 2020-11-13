@@ -1,9 +1,4 @@
 arch/arm64/boot/dts/qcom/*.building
 out/
-packing/Image.gz-dtb
-packing/dtb
-packing/kernel
-packing/new-boot.img
-packing/Dragonfly*.zip
-packing/Dragonfly/new-boot.img
-toolchain/
+release/Dragonfly/Image.gz-dtb
+release/Dragonfly/Dragonfly.zip
