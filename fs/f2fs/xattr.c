@@ -312,7 +312,7 @@ static int lookup_all_xattrs(struct inode *inode, struct page *ipage,
 		return -ENODATA;
 
 	*base_size = XATTR_SIZE(xnid, inode) + XATTR_PADDING_SIZE;
-	txattr_addr = kzalloc(*base_size, GFP_F2FS_ZERO);
+	txattr_addr = f2fs_kzalloc(F2FS_I_SB(inode), *base_size, GFP_NOFS);
 	if (!txattr_addr)
 		return -ENOMEM;
 
@@ -324,7 +324,7 @@ static int lookup_all_xattrs(struct inode *inode, struct page *ipage,
 		if (err)
 			goto out;
 
-		*xe = __find_inline_xattr(txattr_addr, &last_addr,
+		*xe = __find_inline_xattr(inode, txattr_addr, &last_addr,
 						index, len, name);
 		if (*xe) {
 			*base_size = inline_size;
@@ -558,9 +558,9 @@ ssize_t f2fs_listxattr(struct dentry *dentry, char *buffer, size_t buffer_size)
 
 		if ((void *)(entry) + sizeof(__u32) > last_base_addr ||
 			(void *)XATTR_NEXT_ENTRY(entry) > last_base_addr) {
-			f2fs_msg(dentry->d_sb, KERN_ERR,
-				 "inode (%lu) has corrupted xattr",
-				 inode->i_ino);
+			f2fs_msg(F2FS_I_SB(inode)->sb, KERN_ERR,
+					"inode (%lu) has corrupted xattr",
+					inode->i_ino);
 			set_sbi_flag(F2FS_I_SB(inode), SBI_NEED_FSCK);
 			error = -EFSCORRUPTED;
 			goto cleanup;
@@ -758,4 +758,3 @@ int f2fs_setxattr(struct inode *inode, int index, const char *name,
 	f2fs_update_time(sbi, REQ_TIME);
 	return err;
 }
-
