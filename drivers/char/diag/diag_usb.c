@@ -231,25 +231,6 @@ static void usb_connect(struct diag_usb_info *ch)
 	queue_work(ch->usb_wq, &(ch->read_work));
 }
 
-static void usb_connect_work_fn(struct work_struct *work)
-{
-	struct diag_usb_info *ch = container_of(work, struct diag_usb_info,
-						connect_work);
-
-	wait_event_interruptible(ch->wait_q, ch->enabled > 0);
-	ch->max_size = usb_diag_request_size(ch->hdl);
-	atomic_set(&ch->connected, 1);
-
-	DIAG_LOG(DIAG_DEBUG_PERIPHERALS,
-	"diag: USB channel %s: disconnected_status: %d, connected_status: %d\n",
-	ch->name, atomic_read(&ch->disconnected), atomic_read(&ch->connected));
-
-	usb_connect(ch);
-
-	if (atomic_read(&ch->disconnected))
-		wake_up_interruptible(&ch->wait_q);
-}
-
 /*
  * This function is called asynchronously when USB is disconnected
  * and synchronously when Diag wants to disconnect from USB
