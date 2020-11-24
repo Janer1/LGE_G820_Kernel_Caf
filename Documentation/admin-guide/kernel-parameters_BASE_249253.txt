@@ -552,7 +552,7 @@
 			loops can be debugged more effectively on production
 			systems.
 
-	clearcpuid=BITNUM[,BITNUM...] [X86]
+	clearcpuid=BITNUM [X86]
 			Disable CPUID feature X for the kernel. See
 			arch/x86/include/asm/cpufeatures.h for the valid bit
 			numbers. Note the Linux specific bits are not necessarily
@@ -840,6 +840,9 @@
 			Can be useful to work around chipset bugs.
 
 	dis_ucode_ldr	[X86] Disable the microcode loader.
+
+	dm=		[DM] Allows early creation of a device-mapper device.
+			See Documentation/device-mapper/boot.txt.
 
 	dma_debug=off	If the kernel is compiled with DMA_API_DEBUG support,
 			this option disables the debugging code at boot.

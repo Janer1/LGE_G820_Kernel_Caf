@@ -1413,6 +1413,7 @@ retry:
 				goto retry;
 			}
 		}
+
 		rc = msm_find_most_appropriate_phase(host, tuned_phases,
 							tuned_phase_cnt);
 		if (rc < 0)

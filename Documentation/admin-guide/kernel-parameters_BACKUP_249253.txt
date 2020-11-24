@@ -430,6 +430,10 @@
 			embedded devices based on command line input.
 			See Documentation/block/cmdline-partition.txt
 
+	boot_cpus=	[SMP]
+			Rather than attempting to online all possible CPUs at
+			boot time, only online the specified set of CPUs.
+
 	boot_delay=	Milliseconds to delay each printk during boot.
 			Values larger than 10 seconds (10000) are changed to
 			no delay (0).
@@ -841,6 +845,14 @@
 
 	dis_ucode_ldr	[X86] Disable the microcode loader.
 
+<<<<<<< HEAD
+	dm=		[DM] Allows early creation of a device-mapper device.
+			See Documentation/device-mapper/boot.txt.
+
+	dmasound=	[HW,OSS] Sound subsystem buff
+
+=======
+>>>>>>> 1c5863fe4d95b8644f917ce4a318417dd921d752
 	dma_debug=off	If the kernel is compiled with DMA_API_DEBUG support,
 			this option disables the debugging code at boot.
 
@@ -2446,6 +2458,8 @@
 					       mds=off [X86]
 					       tsx_async_abort=off [X86]
 					       kvm.nx_huge_pages=off [X86]
+					       no_entry_flush [PPC]
+					       no_uaccess_flush [PPC]
 
 				Exceptions:
 					       This does not have any effect on
@@ -2749,6 +2763,8 @@
 
 	noefi		Disable EFI runtime services support.
 
+	no_entry_flush  [PPC] Don't flush the L1-D cache when entering the kernel.
+
 	noexec		[IA-64]
 
 	noexec		[X86]
@@ -2797,6 +2813,9 @@
 
 	nospec_store_bypass_disable
 			[HW] Disable all mitigations for the Speculative Store Bypass vulnerability
+
+	no_uaccess_flush
+	                [PPC] Don't flush the L1-D cache after accessing user data.
 
 	noxsave		[BUGS=X86] Disables x86 extended register state save
 			and restore using xsave. The kernel will fallback to
@@ -3907,6 +3926,17 @@
 		protect_image	Turn on image protection during restoration
 				(that will set all pages holding image data
 				during restoration read-only).
+
+	noswap_randomize
+			Kernel uses random disk offsets to help with wear-levelling
+			of SSD devices, while saving the hibernation snapshot image to
+			disk. Use this parameter to disable this feature for SSD
+			devices in scenarios when, such randomization is addressed at
+			the firmware level and hibenration image is not re-generated
+			frequently.
+			(Useful for improving hibernation resume time as snapshot pages
+			are available in disk serially and can be read in bigger chunks
+			without seeking)
 
 	retain_initrd	[RAM] Keep initrd memory after extraction
 
@@ -5025,6 +5055,14 @@
 	xen_nopv	[X86]
 			Disables the PV optimizations forcing the HVM guest to
 			run as generic HVM guest with no PV drivers.
+
+	xen.event_eoi_delay=	[XEN]
+			How long to delay EOI handling in case of event
+			storms (jiffies). Default is 10.
+
+	xen.event_loop_timeout=	[XEN]
+			After which time (jiffies) the event handling loop
+			should start to delay EOI handling. Default is 2.
 
 	xirc2ps_cs=	[NET,PCMCIA]
 			Format:
