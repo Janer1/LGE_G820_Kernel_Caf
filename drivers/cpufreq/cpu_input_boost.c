@@ -57,7 +57,7 @@ module_param(cpu_freq_idle_little, uint, 0644);
 module_param(wake_boost_duration, short, 0644);
 
 enum {
-	SCREEN_ON,
+	SCREEN_OFF,
 	INPUT_BOOST,
 	MAX_BOOST
 };
@@ -155,7 +155,7 @@ static void update_online_cpu_policy(void)
 
 static void __cpu_input_boost_kick(struct boost_drv *b)
 {
-	if (!test_bit(SCREEN_ON, &b->state))
+	if (test_bit(SCREEN_OFF, &b->state))
 		return;
 
 	set_bit(INPUT_BOOST, &b->state);
@@ -177,7 +177,7 @@ static void __cpu_input_boost_kick_max(struct boost_drv *b,
 	unsigned long boost_jiffies = msecs_to_jiffies(duration_ms);
 	unsigned long curr_expires, new_expires;
 
-	if (!test_bit(SCREEN_ON, &b->state))
+	if (test_bit(SCREEN_OFF, &b->state))
 		return;
 
 	do {
@@ -259,7 +259,7 @@ static int cpu_notifier_cb(struct notifier_block *nb, unsigned long action,
 		return NOTIFY_OK;
 
 	/* Unboost when the screen is off */
-	if (!test_bit(SCREEN_ON, &b->state)) {
+	if (test_bit(SCREEN_OFF, &b->state)) {
 		policy->min = get_idle_freq(policy);
 		return NOTIFY_OK;
 	}
@@ -295,10 +295,10 @@ static int msm_drm_notifier_cb(struct notifier_block *nb, unsigned long action,
 
 	/* Boost when the screen turns on and unboost when it turns off */
 	if (*blank == MSM_DRM_BLANK_UNBLANK_CUST) {
-		set_bit(SCREEN_ON, &b->state);
+		clear_bit(SCREEN_OFF, &b->state);
 		__cpu_input_boost_kick_max(b, wake_boost_duration);
-	} else if (*blank == MSM_DRM_BLANK_POWERDOWN_CUST) {
-		clear_bit(SCREEN_ON, &b->state);
+	} else {
+		set_bit(SCREEN_OFF, &b->state);
 		wake_up(&b->boost_waitq);
 	}
 
@@ -392,8 +392,6 @@ static int __init cpu_input_boost_init(void)
 	struct boost_drv *b = &boost_drv_g;
 	struct task_struct *thread;
 	int ret;
-
-	set_bit(SCREEN_ON, &b->state);
 
 	b->cpu_notif.notifier_call = cpu_notifier_cb;
 	ret = cpufreq_register_notifier(&b->cpu_notif, CPUFREQ_POLICY_NOTIFIER);
