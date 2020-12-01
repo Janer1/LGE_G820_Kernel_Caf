@@ -50,9 +50,6 @@
 #define CAM_IR_LED     (1 << 27)
 #define STR_BUFFER_MAX_LENGTH  1024
 
-/* Kill debug logging from camera */
-#define CAM_DEBUG_LOGGING 0
-
 /*
  *  cam_debug_log()
  *
@@ -69,7 +66,6 @@
 void cam_debug_log(unsigned int module_id, const char *func, const int line,
 	const char *fmt, ...);
 
-#if CAM_DEBUG_LOGGING
 /*
  * cam_get_module_name()
  *
@@ -186,5 +182,4 @@ const char *cam_get_module_name(unsigned int module_id);
 				__LINE__, ##args);			\
 	})
 
-#endif /* CAM_DEBUG_LOGGING */
 #endif /* _CAM_DEBUG_UTIL_H_ */
