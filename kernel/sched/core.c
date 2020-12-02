@@ -3198,8 +3198,9 @@ void scheduler_tick(void)
 
 	early_notif = early_detection_notify(rq, wallclock);
 	if (early_notif)
-		cpufreq_update_util(rq, SCHED_CPUFREQ_EARLY_DET);
+		flag = SCHED_CPUFREQ_WALT | SCHED_CPUFREQ_EARLY_DET;
 
+	cpufreq_update_util(rq, flag);
 	rq_unlock(rq, &rf);
 
 	perf_event_task_tick();
