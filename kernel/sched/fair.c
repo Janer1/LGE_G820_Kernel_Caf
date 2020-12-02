@@ -76,8 +76,6 @@ walt_dec_cfs_rq_stats(struct cfs_rq *cfs_rq, struct task_struct *p) {}
 
 #endif
 
-static inline bool cpu_is_in_target_set(struct task_struct *p, int cpu);
-
 /*
  * Targeted preemption latency for CPU-bound tasks:
  *
