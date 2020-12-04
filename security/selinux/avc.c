@@ -89,6 +89,13 @@ unsigned int avc_cache_threshold = AVC_DEF_CACHE_THRESHOLD;
 DEFINE_PER_CPU(struct avc_cache_stats, avc_cache_stats) = { 0 };
 #endif
 
+struct selinux_avc {
+	unsigned int avc_cache_threshold;
+	struct avc_cache avc_cache;
+};
+
+static struct selinux_avc selinux_avc;
+
 static struct avc_cache avc_cache;
 static struct avc_callback_node *avc_callbacks;
 static struct kmem_cache *avc_node_cachep;

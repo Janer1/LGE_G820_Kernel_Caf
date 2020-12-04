@@ -99,6 +99,7 @@ extern int selinux_policycap_nnp_nosuid_transition;
 /* limitation of boundary depth  */
 #define POLICYDB_BOUNDS_MAXDEPTH	4
 
+struct selinux_avc;
 int security_mls_enabled(void);
 
 int security_load_policy(void *data, size_t len);
