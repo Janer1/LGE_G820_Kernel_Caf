@@ -14,8 +14,8 @@ $BOOTMODE || ps -A 2>/dev/null | grep zygote | grep -v grep >/dev/null && BOOTMO
 
 ui_print "######################################";
 ui_print "#          Dragonfly kernel          #";
-ui_print "#              LG G8                 #";
-ui_print "#             by AnhTran             #";
+ui_print "#              LG G8X                #";
+ui_print "#             by Awesomeslayerg      #";
 ui_print "######################################";
 ui_print " ";
 
